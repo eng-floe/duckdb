@@ -1276,7 +1276,10 @@ CatalogEntryLookup Catalog::TryLookupEntry(CatalogEntryRetriever &retriever, con
 
 CatalogEntryLookup Catalog::TryLookupDefaultTable(CatalogEntryRetriever &retriever, const EntryLookupInfo &lookup_info,
                                                   bool allow_ignore_at_clause) {
-	auto catalog_by_name = GetCatalogEntry(retriever, lookup_info.GetEntryIdentifier());
+	// a provided database has no default table, so its provider is not asked
+	auto &context = retriever.GetContext();
+	auto database = DatabaseManager::Get(context).GetAttachedDatabase(context, lookup_info.GetEntryIdentifier());
+	optional_ptr<Catalog> catalog_by_name = database ? &database->GetCatalog() : nullptr;
 
 	if (catalog_by_name && catalog_by_name->HasDefaultTable()) {
 		auto transaction = catalog_by_name->GetCatalogTransaction(retriever.GetContext());
