@@ -87,8 +87,14 @@ optional_ptr<AttachedDatabase> DatabaseManager::GetProvidedDatabase(ClientContex
 		}
 		auto provided = callback->ProvideDatabase(context, name);
 		if (provided) {
+			auto &meta_transaction = MetaTransaction::Get(context);
+			// a name the transaction uses keeps its database
+			auto used = meta_transaction.GetReferencedDatabase(name);
+			if (used) {
+				return used;
+			}
 			provided->SetProvided();
-			return MetaTransaction::Get(context).UseDatabase(provided);
+			return meta_transaction.UseDatabase(provided);
 		}
 	}
 	return nullptr;
@@ -611,11 +617,23 @@ vector<shared_ptr<AttachedDatabase>> DatabaseManager::GetDatabases(ClientContext
 	if (!max_db_count.IsValid() || max_db_count.GetIndex() >= 2) {
 		result.push_back(context.client_data->temporary_objects);
 	}
+	// a name an attached database, or an earlier extension's database, has is theirs, as in a lookup
+	identifier_set_t listed {system->GetName(), context.client_data->temporary_objects->GetName()};
+	optional_ptr<MetaTransaction> meta_transaction;
+	if (context.transaction.HasActiveTransaction()) {
+		meta_transaction = MetaTransaction::Get(context);
+	}
 	for (auto &database : provided) {
 		if (max_db_count.IsValid() && result.size() >= max_db_count.GetIndex()) {
 			break;
 		}
-		result.push_back(std::move(database));
+		auto &name = database->GetName();
+		if (databases.find(name) != databases.end() || !listed.insert(name).second) {
+			continue;
+		}
+		// a name the transaction uses keeps its database
+		auto used = meta_transaction ? meta_transaction->GetReferencedDatabaseOwning(name) : nullptr;
+		result.push_back(used ? std::move(used) : std::move(database));
 	}
 
 	return result;

@@ -22,6 +22,8 @@ struct TestProvider : ExtensionCallback {
 	vector<Identifier> asked;
 	vector<optional_idx> listed;
 	bool lone_qualifiers = true;
+	//! Whether each call makes the database anew.
+	bool fresh = false;
 
 	bool ProvidesDatabaseForLoneQualifier() const override {
 		return lone_qualifiers;
@@ -34,7 +36,7 @@ struct TestProvider : ExtensionCallback {
 			return nullptr;
 		}
 		auto &database = provided_to->database;
-		if (!database) {
+		if (!database || fresh) {
 			AttachInfo info;
 			info.name = name;
 			info.path = ":memory:";
@@ -132,4 +134,22 @@ TEST_CASE("Test databases an extension provides to a connection", "[api]") {
 	for (auto &max_db_count : provider->listed) {
 		REQUIRE(max_db_count.IsValid());
 	}
+
+	// A name an attached database has is listed once, the attached one.
+	REQUIRE_NO_FAIL(other.Query("ATTACH ':memory:' AS provided"));
+	result = provided_to.Query(listed);
+	REQUIRE(CHECK_COLUMN(result, 0, {1}));
+	REQUIRE_NO_FAIL(other.Query("DETACH provided"));
+
+	// A transaction keeps the first database it uses under a name, though the extension makes one anew on each
+	// call, when a listing or a lone qualifier asks for it again.
+	REQUIRE_NO_FAIL(provided_to.Query("DROP SCHEMA memory.provided CASCADE"));
+	provider->fresh = true;
+	REQUIRE_NO_FAIL(provided_to.Query("BEGIN"));
+	REQUIRE_NO_FAIL(provided_to.Query("CREATE TABLE provided.main.u AS SELECT 5 AS i"));
+	result = provided_to.Query("SELECT count(*) FROM duckdb_tables() WHERE table_name = 'u'");
+	REQUIRE(CHECK_COLUMN(result, 0, {1}));
+	result = provided_to.Query("SELECT i FROM provided.u");
+	REQUIRE(CHECK_COLUMN(result, 0, {5}));
+	REQUIRE_NO_FAIL(provided_to.Query("COMMIT"));
 }

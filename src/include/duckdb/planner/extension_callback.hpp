@@ -43,7 +43,7 @@ public:
 	//! The database `name` this extension provides to `context`'s connection, asked for a name no attached
 	//! database has. A provided database belongs to the connection: other connections never see it. It has no
 	//! default table: `FROM <name>` reads the default table of an attached database alone. The extension keeps
-	//! it no longer than the database instance.
+	//! it no longer than the database instance. A transaction keeps the first database it uses under a name.
 	virtual shared_ptr<AttachedDatabase> ProvideDatabase(ClientContext &context, const Identifier &name) {
 		return nullptr;
 	}
@@ -55,7 +55,8 @@ public:
 	}
 	//! Adds to `result` the databases this extension provides to `context`'s connection, asked wherever its
 	//! databases are listed. With `max_db_count`, the listing need not be complete: it names candidates, such as
-	//! an error's suggestions, and no more than that many are kept.
+	//! an error's suggestions, and no more than that many are kept. A name an attached database, or an earlier
+	//! extension's database, has is listed once, theirs.
 	virtual void ProvideDatabases(ClientContext &context, optional_idx max_db_count,
 	                              vector<shared_ptr<AttachedDatabase>> &result) {
 	}
