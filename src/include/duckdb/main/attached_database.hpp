@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "duckdb/common/atomic.hpp"
 #include "duckdb/common/optional.hpp"
 #include "duckdb/common/prefetched_file_data.hpp"
 #include "duckdb/main/config.hpp"
@@ -160,6 +161,13 @@ public:
 	unique_ptr<ResourceDeleter> ExtractDeleter();
 	bool IsSystem() const;
 	bool IsTemporary() const;
+	//! Whether an extension provides this database to a connection, rather than it being attached
+	bool IsProvided() const {
+		return provided;
+	}
+	void SetProvided() {
+		provided = true;
+	}
 	bool IsReadOnly() const;
 	bool IsInitialDatabase() const;
 	void SetInitialDatabase();
@@ -219,6 +227,7 @@ private:
 	AttachVisibility visibility = AttachVisibility::SHOWN;
 	bool ephemeral = false;
 	bool is_initial_database = false;
+	atomic<bool> provided {false};
 	bool is_closed = false;
 	bool is_closing = false;
 	shared_ptr<mutex> close_lock;
