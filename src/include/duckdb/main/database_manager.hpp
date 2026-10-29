@@ -49,8 +49,13 @@ public:
 	void InitializeSystemCatalog();
 	//! Finalize starting up the system
 	void FinalizeStartup();
-	//! Get an attached database by its name
+	//! Get a database by its name: an attached one, else one an extension provides to `context`'s connection
 	optional_ptr<AttachedDatabase> GetDatabase(ClientContext &context, const Identifier &name);
+	//! Get a database by its name: an attached one, or one the transaction already uses, without asking extensions
+	optional_ptr<AttachedDatabase> GetAttachedDatabase(ClientContext &context, const Identifier &name);
+	//! Get the database a lone qualifier ("x.name") names: an attached one, else one an extension provides for a lone
+	//! qualifier
+	optional_ptr<AttachedDatabase> GetDatabaseForLoneQualifier(ClientContext &context, const Identifier &name);
 	shared_ptr<AttachedDatabase> GetDatabase(const Identifier &name);
 	//! Attach a new database
 	shared_ptr<AttachedDatabase> AttachDatabase(ClientContext &context, AttachInfo &info, AttachOptions &options);
@@ -135,6 +140,13 @@ public:
 	shared_ptr<AttachedDatabase> GetDatabaseInternal(const lock_guard<mutex> &, const Identifier &name);
 
 private:
+	//! The attached database `name`, `context`'s temporary objects included
+	shared_ptr<AttachedDatabase> FindAttachedDatabase(ClientContext &context, const Identifier &name);
+	//! The database `name` an extension provides to `context`'s connection, asking only the extensions that provide
+	//! a database for a lone qualifier if `lone_qualifier`
+	optional_ptr<AttachedDatabase> GetProvidedDatabase(ClientContext &context, const Identifier &name,
+	                                                   bool lone_qualifier);
+
 	optional_ptr<AttachedDatabase> FinalizeAttach(ClientContext &context, AttachInfo &info,
 	                                              shared_ptr<AttachedDatabase> database);
 

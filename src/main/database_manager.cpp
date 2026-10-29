@@ -10,6 +10,7 @@
 #include "duckdb/main/database_path_and_type.hpp"
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/parser/parsed_data/alter_database_info.hpp"
+#include "duckdb/planner/extension_callback.hpp"
 #include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
@@ -52,6 +53,54 @@ void DatabaseManager::FinalizeStartup() {
 }
 
 optional_ptr<AttachedDatabase> DatabaseManager::GetDatabase(ClientContext &context, const Identifier &name) {
+	auto database = GetAttachedDatabase(context, name);
+	if (database) {
+		return database;
+	}
+	// none attached by that name: one an extension provides to this connection
+	return GetProvidedDatabase(context, name, false);
+}
+
+optional_ptr<AttachedDatabase> DatabaseManager::GetDatabaseForLoneQualifier(ClientContext &context,
+                                                                            const Identifier &name) {
+	auto &meta_transaction = MetaTransaction::Get(context);
+	auto database = meta_transaction.GetReferencedDatabase(name);
+	if (database && !database->IsProvided()) {
+		return database;
+	}
+	// a name the transaction uses for a provided database names no attached one
+	if (!database) {
+		auto attached = FindAttachedDatabase(context, name);
+		if (attached) {
+			return meta_transaction.UseDatabase(attached);
+		}
+	}
+	// a provided database is named in full, unless its extension provides one for a lone qualifier
+	return GetProvidedDatabase(context, name, true);
+}
+
+optional_ptr<AttachedDatabase> DatabaseManager::GetProvidedDatabase(ClientContext &context, const Identifier &name,
+                                                                    bool lone_qualifier) {
+	for (auto &callback : ExtensionCallback::Iterate(context)) {
+		if (lone_qualifier && !callback->ProvidesDatabaseForLoneQualifier()) {
+			continue;
+		}
+		auto provided = callback->ProvideDatabase(context, name);
+		if (provided) {
+			auto &meta_transaction = MetaTransaction::Get(context);
+			// a name the transaction uses keeps its database
+			auto used = meta_transaction.GetReferencedDatabase(name);
+			if (used) {
+				return used;
+			}
+			provided->SetProvided();
+			return meta_transaction.UseDatabase(provided);
+		}
+	}
+	return nullptr;
+}
+
+optional_ptr<AttachedDatabase> DatabaseManager::GetAttachedDatabase(ClientContext &context, const Identifier &name) {
 	auto &meta_transaction = MetaTransaction::Get(context);
 	// first check if we have a local reference to this database already
 	auto database = meta_transaction.GetReferencedDatabase(name);
@@ -59,17 +108,19 @@ optional_ptr<AttachedDatabase> DatabaseManager::GetDatabase(ClientContext &conte
 		// we do! return it
 		return database;
 	}
-	lock_guard<mutex> guard(databases_lock);
-	shared_ptr<AttachedDatabase> db;
-	if (name == TEMP_CATALOG) {
-		db = context.client_data->temporary_objects;
-	} else {
-		db = GetDatabaseInternal(guard, name);
-	}
+	auto db = FindAttachedDatabase(context, name);
 	if (!db) {
 		return nullptr;
 	}
 	return meta_transaction.UseDatabase(db);
+}
+
+shared_ptr<AttachedDatabase> DatabaseManager::FindAttachedDatabase(ClientContext &context, const Identifier &name) {
+	if (name == TEMP_CATALOG) {
+		return context.client_data->temporary_objects;
+	}
+	lock_guard<mutex> guard(databases_lock);
+	return GetDatabaseInternal(guard, name);
 }
 
 shared_ptr<AttachedDatabase> DatabaseManager::GetDatabase(const Identifier &name) {
@@ -542,6 +593,14 @@ void DatabaseManager::SetDefaultDatabase(const Identifier &name) {
 vector<shared_ptr<AttachedDatabase>> DatabaseManager::GetDatabases(ClientContext &context,
                                                                    const optional_idx max_db_count) {
 	vector<shared_ptr<AttachedDatabase>> result;
+	// the databases extensions provide to this connection, asked before the lock is taken
+	vector<shared_ptr<AttachedDatabase>> provided;
+	for (auto &callback : ExtensionCallback::Iterate(context)) {
+		callback->ProvideDatabases(context, max_db_count, provided);
+	}
+	for (auto &database : provided) {
+		database->SetProvided();
+	}
 
 	lock_guard<mutex> guard(databases_lock);
 	idx_t count = 2;
@@ -557,6 +616,24 @@ vector<shared_ptr<AttachedDatabase>> DatabaseManager::GetDatabases(ClientContext
 	}
 	if (!max_db_count.IsValid() || max_db_count.GetIndex() >= 2) {
 		result.push_back(context.client_data->temporary_objects);
+	}
+	// a name an attached database, or an earlier extension's database, has is theirs, as in a lookup
+	identifier_set_t listed {system->GetName(), context.client_data->temporary_objects->GetName()};
+	optional_ptr<MetaTransaction> meta_transaction;
+	if (context.transaction.HasActiveTransaction()) {
+		meta_transaction = MetaTransaction::Get(context);
+	}
+	for (auto &database : provided) {
+		if (max_db_count.IsValid() && result.size() >= max_db_count.GetIndex()) {
+			break;
+		}
+		auto &name = database->GetName();
+		if (databases.find(name) != databases.end() || !listed.insert(name).second) {
+			continue;
+		}
+		// a name the transaction uses keeps its database
+		auto used = meta_transaction ? meta_transaction->GetReferencedDatabaseOwning(name) : nullptr;
+		result.push_back(used ? std::move(used) : std::move(database));
 	}
 
 	return result;

@@ -78,7 +78,7 @@ void Binder::BindSchemaOrCatalog(CatalogEntryRetriever &retriever, Identifier &c
 	// schema is specified - but catalog is not
 	// try searching for the catalog instead
 	auto &db_manager = DatabaseManager::Get(context);
-	auto database = db_manager.GetDatabase(context, schema);
+	auto database = db_manager.GetDatabaseForLoneQualifier(context, schema);
 	if (!database) {
 		//! No database by that name was found
 		return;
