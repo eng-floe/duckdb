@@ -14,9 +14,12 @@ runs:
   steps:
     - name: Setup MSVC variables
       shell: pwsh
+      env:
+        ARCH: ${{ inputs.arch }}
+        HOST_ARCH: ${{ inputs.host_arch }}
       run: |
-        $arch = '${{ inputs.arch }}'
-        $hostArch = '${{ inputs.host_arch }}'
+        $arch = $env:ARCH
+        $hostArch = $env:HOST_ARCH
         $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
         if (!(Test-Path $vswhere)) {
           throw "vswhere not found at $vswhere"
