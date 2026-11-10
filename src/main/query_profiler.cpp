@@ -127,6 +127,7 @@ void QueryProfiler::Start(const string &query) {
 
 void QueryProfiler::Reset() {
 	tree_map.clear();
+	plan_alive = false;
 	root = nullptr;
 	metrics.reset();
 	running = false;
@@ -1084,7 +1085,18 @@ void QueryProfiler::Initialize(const PhysicalOperator &root_op) {
 	} else {
 		auto &client_config = ClientConfig::GetConfig(context);
 		metrics = make_uniq<GatheredMetrics>(client_config.tracked_metrics);
+		plan_alive = true;
 	}
+}
+
+void QueryProfiler::GetTreeMapUnderLock(const std::function<void(optional_ptr<const TreeMap>)> &callback) const {
+	lock_guard<std::mutex> guard(lock);
+	callback(plan_alive ? &tree_map : nullptr);
+}
+
+void QueryProfiler::EndPlan() {
+	lock_guard<std::mutex> guard(lock);
+	plan_alive = false;
 }
 
 void QueryProfiler::Render(const ProfilingNode &node, BaseTreeRenderer &ss) const {
