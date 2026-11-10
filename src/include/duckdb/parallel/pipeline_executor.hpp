@@ -64,6 +64,8 @@ public:
 	//! Execute a pipeline with a source and a sink until finished, or until max_chunks were processed from the source
 	//! Returns true if execution is finished, false if Execute should be called again
 	PipelineExecuteResult Execute(idx_t max_chunks);
+	//! Merges the metrics this thread profiled so far into the query profiler
+	void FlushProfiler();
 	//! Pushes a chunk from an external producer through this pipeline into the sink
 	PipelineExecuteResult PushExternal(DataChunk &input, const OperatorPartitionData &partition_data,
 	                                   optional_idx source_min_batch_index);

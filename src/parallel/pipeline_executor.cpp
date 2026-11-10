@@ -439,6 +439,10 @@ PipelineExecuteResult PipelineExecutor::Execute() {
 	return Execute(NumericLimits<idx_t>::Maximum());
 }
 
+void PipelineExecutor::FlushProfiler() {
+	pipeline.executor.Flush(thread);
+}
+
 PipelineExecuteResult PipelineExecutor::PushExternal(DataChunk &input,
                                                      const OperatorPartitionData &source_partition_data,
                                                      optional_idx source_min_batch_index) {

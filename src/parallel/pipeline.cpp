@@ -49,8 +49,11 @@ TaskExecutionResult PipelineTask::ExecuteTask(TaskExecutionMode mode) {
 
 		switch (res) {
 		case PipelineExecuteResult::NOT_FINISHED:
+			// flush after every step, to allow continuous profiling
+			pipeline_executor->FlushProfiler();
 			return TaskExecutionResult::TASK_NOT_FINISHED;
 		case PipelineExecuteResult::INTERRUPTED:
+			pipeline_executor->FlushProfiler();
 			return TaskExecutionResult::TASK_BLOCKED;
 		case PipelineExecuteResult::FINISHED:
 			break;
@@ -61,6 +64,7 @@ TaskExecutionResult PipelineTask::ExecuteTask(TaskExecutionMode mode) {
 		case PipelineExecuteResult::NOT_FINISHED:
 			throw InternalException("Execute without limit should not return NOT_FINISHED");
 		case PipelineExecuteResult::INTERRUPTED:
+			pipeline_executor->FlushProfiler();
 			return TaskExecutionResult::TASK_BLOCKED;
 		case PipelineExecuteResult::FINISHED:
 			break;
