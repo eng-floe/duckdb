@@ -98,6 +98,8 @@ ErrorData ClientContext::EndQueryInternal(ClientContextLock &lock, bool success,
 	}
 	active_query->progress_bar.reset();
 	D_ASSERT(active_query.get());
+	// the profiler tree map refers to the plan that is freed below
+	client_data->profiler->EndPlan();
 	active_query.reset();
 	query_deadline.SetInvalid();
 	query_progress.Initialize();
@@ -538,6 +540,8 @@ unique_ptr<QueryResult> ClientContext::RunToResultStatementInternal(ClientContex
 
 void ClientContext::EndStatementInternal(ClientContextLock &lock) {
 	active_query->executor->CancelTasks();
+	// the profiler tree map refers to the plan that is freed below
+	client_data->profiler->EndPlan();
 	active_query->executor.reset();
 	active_query->progress_bar.reset();
 	// The plan outlives the executor

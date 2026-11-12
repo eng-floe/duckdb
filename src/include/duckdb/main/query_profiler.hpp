@@ -189,6 +189,10 @@ public:
 		lock_guard<std::mutex> guard(lock);
 		callback(root.get());
 	}
+	//! Provides access to the tree map under the lock, or nullptr once the plan it refers to is being freed
+	DUCKDB_API void GetTreeMapUnderLock(const std::function<void(optional_ptr<const TreeMap>)> &callback) const;
+	//! Marks the plan the tree map refers to as freed, called before the plan is destroyed
+	DUCKDB_API void EndPlan();
 	//! Provides access to the finalized metrics and query tree of the last profiled query, both null while a query is
 	//! running or when there are none, and ensures there are no concurrent modifications
 	DUCKDB_API void GetFinalizedProfileUnderLock(
@@ -218,6 +222,8 @@ private:
 
 	//! A map of a Physical Operator pointer to a tree node
 	TreeMap tree_map;
+	//! Whether the plan the tree map refers to is still alive
+	bool plan_alive = false;
 	//! Whether or not we are running as part of a explain_analyze query
 	bool is_explain_analyze;
 	//! Whether root metrics have been finalized for output
