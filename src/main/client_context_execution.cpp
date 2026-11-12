@@ -563,8 +563,10 @@ unique_ptr<QueryResult> ClientContext::RunToResultStatementInternal(ClientContex
 void ClientContext::EndStatementInternal(ClientContextLock &lock, optional_ptr<ErrorData> error) {
 	if (active_query->executor) {
 		active_query->executor->CancelTasks();
-		active_query->executor.reset();
 	}
+	// the profiler tree map refers to the plan that is freed below
+	client_data->profiler->EndPlan();
+	active_query->executor.reset();
 	active_query->progress_bar.reset();
 	// The plan outlives the executor
 	active_query->prepared.reset();

@@ -128,6 +128,7 @@ void QueryProfiler::Start(const string &query) {
 
 void QueryProfiler::Reset() {
 	tree_map.clear();
+	plan_alive = false;
 	root = nullptr;
 	metrics.reset();
 	tracked_metric_patterns.reset();
@@ -616,8 +617,13 @@ void QueryProfiler::Flush(OperatorProfiler &profiler) {
 		info.Merge(node.second);
 		// Update extra_info from the per-thread metrics: these are set during execution (StartOperator),
 		// so they capture runtime values like dynamic filters that aren't known at plan-creation time.
+		// Merged by key: a thread flushes several times per task, and only its first flush carries the params.
 		if (!node.second.GetExtraInfo().empty()) {
-			info.SetExtraInfo(node.second.GetExtraInfo());
+			auto extra_info = info.GetExtraInfo();
+			for (auto &entry : node.second.GetExtraInfo()) {
+				extra_info[entry.first] = entry.second;
+			}
+			info.SetExtraInfo(std::move(extra_info));
 		}
 
 		if (node.second.system_peak_buffer_manager_memory > query_metrics.system_peak_buffer_memory) {
@@ -1154,7 +1160,18 @@ void QueryProfiler::Initialize(const PhysicalOperator &root_op) {
 	} else {
 		auto &client_config = ClientConfig::GetConfig(context);
 		metrics = make_uniq<GatheredMetrics>(client_config.tracked_metrics);
+		plan_alive = true;
 	}
+}
+
+void QueryProfiler::GetTreeMapUnderLock(const std::function<void(optional_ptr<const TreeMap>)> &callback) const {
+	lock_guard<std::mutex> guard(lock);
+	callback(plan_alive ? &tree_map : nullptr);
+}
+
+void QueryProfiler::EndPlan() {
+	lock_guard<std::mutex> guard(lock);
+	plan_alive = false;
 }
 
 void QueryProfiler::Render(const ProfilingNode &node, BaseTreeRenderer &ss) const {
