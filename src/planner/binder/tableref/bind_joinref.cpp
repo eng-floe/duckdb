@@ -245,6 +245,11 @@ BoundStatement Binder::Bind(JoinRef &ref) {
 	vector<Identifier> extra_using_columns;
 	switch (ref.ref_type) {
 	case JoinRefType::NATURAL: {
+		if (IsExtractingNames()) {
+			// the columns are unknown: join on none
+			result->ref_type = JoinRefType::CROSS;
+			break;
+		}
 		// natural join, figure out which column names are present in both sides of the join
 		// first bind the left hand side and get a list of all the tables and column names
 		identifier_set_t lhs_columns;
@@ -301,7 +306,10 @@ BoundStatement Binder::Bind(JoinRef &ref) {
 	}
 	case JoinRefType::REGULAR:
 	case JoinRefType::ASOF:
-		if (!ref.using_columns.empty()) {
+		if (!ref.using_columns.empty() && IsExtractingNames()) {
+			// the columns are unknown: join on none
+			result->ref_type = JoinRefType::CROSS;
+		} else if (!ref.using_columns.empty()) {
 			// USING columns
 			D_ASSERT(!result->condition);
 			extra_using_columns = ref.using_columns;
