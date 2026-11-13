@@ -348,6 +348,9 @@ BoundStatement Binder::BindNode(SetOperationNode &statement) {
 		result.names = result.bound_children[0].names;
 		auto result_columns = result.bound_children[0].types.size();
 		for (idx_t i = 1; i < result.bound_children.size(); ++i) {
+			if (IsExtractingNames()) {
+				FitColumnCount(result.bound_children[i], result_columns);
+			}
 			if (result.bound_children[i].types.size() != result_columns) {
 				throw BinderException("Set operations can only apply to expressions with the "
 				                      "same number of result columns");
