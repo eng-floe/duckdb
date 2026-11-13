@@ -577,8 +577,11 @@ FilterPushdownResult FilterCombiner::TryPushdownLikeFilter(TableFilterSet &table
 	}
 	auto &like_string = StringValue::Get(constant_value_expr.GetValue());
 	if (like_string[0] == '%' || like_string[0] == '_') {
-		//! If the like starts with a special character we have no fixed prefix so nothing to pushdown
-		return FilterPushdownResult::NO_PUSHDOWN;
+		//! There is no ordered prefix bound, but remote scans can use the full
+		//! expression for conservative substring-index pruning. The original
+		//! expression remains above the scan because this is only partial.
+		table_filters.PushFilter(proj_index, make_uniq<ExpressionFilter>(expr.Copy()));
+		return FilterPushdownResult::PUSHED_DOWN_PARTIALLY;
 	}
 	string prefix;
 	bool equality = true;
