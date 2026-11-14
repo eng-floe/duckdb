@@ -118,6 +118,7 @@ BoundTableFunction::BoundTableFunction(shared_ptr<const TableFunction> function_
 	projection_pushdown = function.projection_pushdown;
 	filter_pushdown = function.filter_pushdown;
 	filter_prune = function.filter_prune;
+	multi_column_filter_pushdown = function.multi_column_filter_pushdown;
 	sampling_pushdown = function.sampling_pushdown;
 	late_materialization = function.late_materialization;
 	function_info = function.function_info;
@@ -180,7 +181,8 @@ bool BaseTableFunction::operator==(const BaseTableFunction &rhs) const {
 	       get_row_id_columns == rhs.get_row_id_columns && serialize == rhs.serialize &&
 	       deserialize == rhs.deserialize && verify_serialization == rhs.verify_serialization &&
 	       projection_pushdown == rhs.projection_pushdown && filter_pushdown == rhs.filter_pushdown &&
-	       filter_prune == rhs.filter_prune && sampling_pushdown == rhs.sampling_pushdown &&
+	       filter_prune == rhs.filter_prune &&
+	       multi_column_filter_pushdown == rhs.multi_column_filter_pushdown && sampling_pushdown == rhs.sampling_pushdown &&
 	       late_materialization == rhs.late_materialization && return_type == rhs.return_type &&
 	       global_initialization == rhs.global_initialization;
 }
