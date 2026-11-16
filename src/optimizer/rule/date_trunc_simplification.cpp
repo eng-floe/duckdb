@@ -65,6 +65,18 @@ static bool TruncatesToDays(DatePartSpecifier part) {
 	}
 }
 
+static bool TruncatesToSecondOrFiner(DatePartSpecifier part) {
+	switch (part) {
+	case DatePartSpecifier::SECOND:
+	case DatePartSpecifier::EPOCH:
+	case DatePartSpecifier::MILLISECONDS:
+	case DatePartSpecifier::MICROSECONDS:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static bool IsAfterFirstYear(const Value &value) {
 	if (value.IsNull()) {
 		return true;
@@ -119,6 +131,11 @@ unique_ptr<Expression> DateTruncSimplificationRule::Apply(LogicalOperator &op, v
 
 	// Bounds finer than a day lose their time when cast to DATE, so keep the comparison.
 	if (column_part.GetReturnType().id() == LogicalTypeId::DATE && !TruncatesToDays(part)) {
+		return nullptr;
+	}
+
+	// Truncating a TIMESTAMPTZ to a minute or longer can cross a UTC offset change, so keep the comparison.
+	if (column_part.GetReturnType().id() == LogicalTypeId::TIMESTAMP_TZ && !TruncatesToSecondOrFiner(part)) {
 		return nullptr;
 	}
 
