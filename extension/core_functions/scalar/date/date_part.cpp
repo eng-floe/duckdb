@@ -1,5 +1,8 @@
 #include "duckdb/parser/expression/function_expression.hpp"
+#include "duckdb/catalog/catalog.hpp"
+#include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/vector/struct_vector.hpp"
+#include "duckdb/function/function_binder.hpp"
 #include "core_functions/scalar/date_functions.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/enum_util.hpp"
@@ -2146,6 +2149,21 @@ static function_statistics_t DatePartUnaryStatistics(DatePartSpecifier part_code
 	throw InternalException("Unrecognized DatePartSpecifier in DatePartUnaryStatistics");
 }
 
+//! The argument properties of the catalog's unary `name` for `argument`, or none without such an overload.
+static vector<ArgProperties> LookupUnaryArgProperties(ClientContext &context, const QualifiedName &name,
+                                                      const LogicalType &argument) {
+	auto entry = Catalog::GetEntry<ScalarFunctionCatalogEntry>(context, name, OnEntryNotFound::RETURN_NULL);
+	if (!entry) {
+		return {};
+	}
+	ErrorData error;
+	auto index = FunctionBinder(context).BindFunction(entry->name, entry->functions, {argument}, error);
+	if (!index.IsValid()) {
+		return {};
+	}
+	return entry->functions.GetFunctionByOffset(index.GetIndex())->GetAllArgProperties();
+}
+
 unique_ptr<FunctionData> DatePartBind(BindScalarFunctionInput &input) {
 	auto &bound_function = input.GetBoundFunction();
 	auto &arguments = input.GetArguments();
@@ -2169,6 +2187,8 @@ unique_ptr<FunctionData> DatePartBind(BindScalarFunctionInput &input) {
 	}
 	bound_function.SetFunctionCallback(DatePartUnaryCallback(part_code, type));
 	bound_function.SetStatisticsCallback(DatePartUnaryStatistics(part_code, type));
+	bound_function.SetArgProperties(LookupUnaryArgProperties(input.GetClientContext(), bound_function.GetQualifiedName(),
+	                                                         bound_function.GetArguments()[0]));
 
 	return nullptr;
 }
