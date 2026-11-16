@@ -428,7 +428,7 @@ unique_ptr<Expression> DateTruncSimplificationRule::CreateTrunc(const BoundConst
 	if (trunc->IsFoldable()) {
 		Value result;
 		if (!ExpressionExecutor::TryEvaluateScalar(rewriter.context, *trunc, result)) {
-			return trunc;
+			return nullptr;
 		}
 
 		return make_uniq<BoundConstantExpression>(result);
@@ -479,7 +479,7 @@ unique_ptr<Expression> DateTruncSimplificationRule::CreateTruncAdd(const BoundCo
 	if (trunc->IsFoldable()) {
 		Value result;
 		if (!ExpressionExecutor::TryEvaluateScalar(rewriter.context, *trunc, result)) {
-			return trunc;
+			return nullptr;
 		}
 
 		return make_uniq<BoundConstantExpression>(result);
