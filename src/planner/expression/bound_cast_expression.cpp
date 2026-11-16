@@ -381,6 +381,11 @@ bool BoundCastExpression::CastCanThrow(const LogicalType &source_type, const Log
 	if (target_type.id() == LogicalTypeId::DECIMAL) {
 		return true;
 	}
+	// Nanoseconds -> microseconds copies infinities and divides finite values (TryCastTimestampBase), which cannot fail
+	if ((source_type.id() == LogicalTypeId::TIMESTAMP_NS && target_type.id() == LogicalTypeId::TIMESTAMP) ||
+	    (source_type.id() == LogicalTypeId::TIMESTAMP_TZ_NS && target_type.id() == LogicalTypeId::TIMESTAMP_TZ)) {
+		return false;
+	}
 	// Casting to a TIMESTAMP overflows for values outside of the timestamp range, even when widening the type,
 	// e.g. a DATE far in the future does not fit in a TIMESTAMP
 	if (LogicalType::TypeIsTimestamp(target_type) || target_type.id() == LogicalTypeId::TIMESTAMP_TZ_NS) {

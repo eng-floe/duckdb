@@ -1,0 +1,190 @@
+# name: test/optimizer/pushdown/infallible_datepart_pushdown.test
+# description: Date parts and casts that cannot throw are pushed into the scan next to other filters
+# group: [pushdown]
+
+require icu
+
+statement ok
+SET Calendar='gregorian';
+
+statement ok
+SET TimeZone='UTC';
+
+statement ok
+CREATE TABLE t AS
+SELECT range::INT AS id,
+       (DATE '2024-01-01' + range::INT) AS d,
+       TIMESTAMP '2024-01-01' + range * INTERVAL 1 HOUR AS ts,
+       (TIMESTAMP '2024-01-01' + range * INTERVAL 1 HOUR)::TIMESTAMP_NS AS tsns,
+       (TIMESTAMP '2024-01-01' + range * INTERVAL 1 HOUR)::TIMESTAMPTZ AS tstz,
+       (TIMESTAMP '2024-01-01' + range * INTERVAL 1 HOUR)::TIMESTAMPTZ::TIMESTAMPTZ_NS AS tstzns,
+       INTERVAL 1 DAY * range AS iv
+FROM range(10);
+
+statement ok
+SET explain_output = 'optimized_only';
+
+# a filter that can throw is only pushed into the scan when it is the only filter, so a Filter above the scan
+# means one of the conjuncts is still considered fallible
+
+query II
+EXPLAIN SELECT id FROM t WHERE month(d) = 1 AND dayofyear(d) = 1
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query II
+EXPLAIN SELECT id FROM t WHERE month(ts) = 1 AND dayofyear(ts) = 1
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query II
+EXPLAIN SELECT id FROM t WHERE hour(tsns::TIMESTAMP) = 1 AND dayofyear(tsns::TIMESTAMP) = 1
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query II
+EXPLAIN SELECT id FROM t WHERE hour(tstzns::TIMESTAMPTZ) = 1 AND dayofyear(tstzns::TIMESTAMPTZ) = 1
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query II
+EXPLAIN SELECT id FROM t WHERE hour(tstz) = 1 AND month(tstz) = 1 AND dayofyear(tstz) = 1
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+# the date_part and EXTRACT forms are rewritten into the unary functions and keep their error mode
+query II
+EXPLAIN SELECT id FROM t WHERE date_part('month', d) = 1 AND dayofyear(d) = 1
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query II
+EXPLAIN SELECT id FROM t WHERE date_part('doy', d) = 1 AND date_part('hour', d) = 0
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query II
+EXPLAIN SELECT id FROM t WHERE EXTRACT(month FROM ts) = 1 AND EXTRACT(doy FROM ts) = 1 AND EXTRACT(hour FROM ts) = 1
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query II
+EXPLAIN SELECT id FROM t WHERE date_part('hour', tstz) = 1 AND date_part('doy', tstz) = 1
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query II
+EXPLAIN SELECT id FROM t WHERE EXTRACT(month FROM tstz) = 1 AND EXTRACT(hour FROM tstz) = 1
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+# other parts keep the date_part set's error mode
+query II
+EXPLAIN SELECT id FROM t WHERE date_part('year', d) = 2024 AND dayofyear(d) = 1
+----
+logical_opt	<REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+# the INTERVAL overloads can throw
+query II
+EXPLAIN SELECT id FROM t WHERE month(iv) = 1 AND dayofyear(iv) = 1
+----
+logical_opt	<REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query II
+EXPLAIN SELECT id FROM t WHERE date_part('month', iv) = 1 AND dayofyear(d) = 1
+----
+logical_opt	<REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+# EXPLAIN plans are not serialized, so the queries themselves are run with plan (de)serialization, which re-binds
+# the functions, and must give the same results
+statement ok
+SET debug_verify_serializer = true
+
+query I
+SELECT id FROM t WHERE month(d) = 1 AND dayofyear(d) = 2
+----
+1
+
+query I
+SELECT id FROM t WHERE date_part('month', d) = 1 AND date_part('doy', d) = 3 AND EXTRACT(hour FROM d) = 0
+----
+2
+
+query I
+SELECT id FROM t WHERE EXTRACT(month FROM ts) = 1 AND EXTRACT(doy FROM ts) = 1 AND EXTRACT(hour FROM ts) = 4
+----
+4
+
+query I
+SELECT id FROM t WHERE hour(tsns::TIMESTAMP) = 5 AND dayofyear(tsns::TIMESTAMP) = 1
+----
+5
+
+query I
+SELECT id FROM t WHERE hour(tstzns::TIMESTAMPTZ) = 6 AND dayofyear(tstzns::TIMESTAMPTZ) = 1
+----
+6
+
+query I
+SELECT id FROM t WHERE date_part('hour', tstz) = 7 AND date_part('doy', tstz) = 1 AND month(tstz) = 1
+----
+7
+
+query I
+SELECT id FROM t WHERE EXTRACT(month FROM tstz) = 1 AND EXTRACT(hour FROM tstz) = 1
+----
+1
+
+statement ok
+SET debug_verify_serializer = false
+
+# a non-Gregorian calendar can fail to represent a timestamp, so its date parts stay fallible
+statement ok
+SET Calendar='chinese';
+
+query II
+EXPLAIN SELECT id FROM t WHERE hour(tstz) = 1 AND month(tstz) = 1
+----
+logical_opt	<REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query II
+EXPLAIN SELECT id FROM t WHERE date_part('hour', tstz) = 1 AND date_part('month', tstz) = 1
+----
+logical_opt	<REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+# a statement prepared under the Gregorian calendar re-binds when the calendar changes, so its date parts become
+# fallible again and a timestamp the calendar cannot represent raises a conversion error
+statement ok
+SET Calendar='gregorian';
+
+statement ok
+CREATE TABLE extremes AS
+SELECT * FROM (VALUES (1, TIMESTAMPTZ '2024-01-01 01:00:00+00'),
+                      (2, TIMESTAMPTZ '290309-12-22 (BC) 00:00:00+00'),
+                      (3, TIMESTAMPTZ '294247-01-10 04:00:54.775806+00')) v(id, tstz);
+
+statement ok
+PREPARE p AS SELECT id FROM extremes WHERE hour(tstz) = 1 AND month(tstz) = 1;
+
+query II
+EXPLAIN EXECUTE p
+----
+logical_opt	<!REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+query I
+EXECUTE p
+----
+1
+
+statement ok
+SET Calendar='chinese';
+
+query II
+EXPLAIN EXECUTE p
+----
+logical_opt	<REGEX>:[\s\S]*─ Filter ─[\s\S]*
+
+statement error
+EXECUTE p
+----
+Conversion Error: Unable to extract calendar part

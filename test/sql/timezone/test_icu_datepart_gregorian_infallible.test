@@ -1,0 +1,68 @@
+# name: test/sql/timezone/test_icu_datepart_gregorian_infallible.test
+# description: ICU hour, month and dayofyear cannot throw in the Gregorian calendar, even at the extremes of the timestamp range
+# group: [timezone]
+
+require icu
+
+statement ok
+SET Calendar='gregorian';
+
+statement ok
+CREATE TABLE extremes AS SELECT * FROM (VALUES (0, TIMESTAMPTZ '290309-12-22 (BC) 00:00:00+00'), (1, TIMESTAMPTZ '294247-01-10 04:00:54.775806+00'), (2, TIMESTAMPTZ 'infinity'), (3, TIMESTAMPTZ '-infinity')) t(i, ts);
+
+statement ok
+SET TimeZone='UTC';
+
+query III
+SELECT hour(ts), month(ts), dayofyear(ts) FROM extremes ORDER BY i
+----
+0	12	357
+4	1	10
+NULL	NULL	NULL
+NULL	NULL	NULL
+
+# date_part with a constant part binds the unary function
+query III
+SELECT date_part('hour', ts), date_part('month', ts), date_part('doy', ts) FROM extremes ORDER BY i
+----
+0	12	357
+4	1	10
+NULL	NULL	NULL
+NULL	NULL	NULL
+
+# local mean time before standard time zones
+statement ok
+SET TimeZone='Pacific/Kiritimati';
+
+query III
+SELECT hour(ts), month(ts), dayofyear(ts) FROM extremes WHERE i < 2 ORDER BY i
+----
+13	12	356
+18	1	10
+
+statement ok
+SET TimeZone='Etc/GMT+12';
+
+query III
+SELECT hour(ts), month(ts), dayofyear(ts) FROM extremes WHERE i < 2 ORDER BY i
+----
+12	12	356
+16	1	9
+
+statement ok
+SET TimeZone='America/New_York';
+
+query III
+SELECT hour(ts), month(ts), dayofyear(ts) FROM extremes WHERE i < 2 ORDER BY i
+----
+19	12	356
+23	1	9
+
+statement ok
+SET TimeZone='Asia/Kathmandu';
+
+query III
+SELECT hour(ts), month(ts), dayofyear(ts) FROM extremes WHERE i < 2 ORDER BY i
+----
+5	12	357
+9	1	10

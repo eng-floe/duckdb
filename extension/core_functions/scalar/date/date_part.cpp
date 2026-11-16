@@ -2169,6 +2169,12 @@ unique_ptr<FunctionData> DatePartBind(BindScalarFunctionInput &input) {
 	}
 	bound_function.SetFunctionCallback(DatePartUnaryCallback(part_code, type));
 	bound_function.SetStatisticsCallback(DatePartUnaryStatistics(part_code, type));
+	// Same error mode as the unary DATE/TIMESTAMP overloads of hour, month and dayofyear, which cannot throw
+	const auto is_infallible_part = part_code == DatePartSpecifier::HOUR || part_code == DatePartSpecifier::MONTH ||
+	                                part_code == DatePartSpecifier::DOY;
+	if (is_infallible_part && (type == LogicalTypeId::DATE || type == LogicalTypeId::TIMESTAMP)) {
+		bound_function.SetErrorMode(FunctionErrors::CANNOT_ERROR);
+	}
 
 	return nullptr;
 }
@@ -2456,6 +2462,17 @@ void SetNonDecreasingExceptInterval(ScalarFunctionSet &functions) {
 	});
 }
 
+void SetCannotErrorForDateAndTimestamp(ScalarFunctionSet &functions) {
+	functions.ApplyToFunctions([](ScalarFunction &function) {
+		// Callers' DATE/TIMESTAMP overloads must not throw: infinities become NULL before the part is extracted.
+		// An allow-list, so an overload added to the set later stays fallible until it is checked.
+		const auto &type = function.GetSignature().GetParameter(0).GetType();
+		if (type == LogicalType::DATE || type == LogicalType::TIMESTAMP) {
+			function.SetErrorMode(FunctionErrors::CANNOT_ERROR);
+		}
+	});
+}
+
 } // namespace
 
 ScalarFunctionSet YearFun::GetFunctions() {
@@ -2465,7 +2482,10 @@ ScalarFunctionSet YearFun::GetFunctions() {
 }
 
 ScalarFunctionSet MonthFun::GetFunctions() {
-	return GetCachedDatepartFunction<DatePart::MonthOperator>();
+	auto set = GetCachedDatepartFunction<DatePart::MonthOperator>();
+	// DateLookupCache returns NULL for infinities and Date::Convert of a finite date cannot throw.
+	SetCannotErrorForDateAndTimestamp(set);
+	return set;
 }
 
 ScalarFunctionSet DayFun::GetFunctions() {
@@ -2505,7 +2525,10 @@ ScalarFunctionSet ISODayOfWeekFun::GetFunctions() {
 }
 
 ScalarFunctionSet DayOfYearFun::GetFunctions() {
-	return GetDatePartFunction<DatePart::DayOfYearOperator>();
+	auto set = GetDatePartFunction<DatePart::DayOfYearOperator>();
+	// PartOperator returns NULL for infinities and Date::ExtractDayOfTheYear of a finite date cannot throw.
+	SetCannotErrorForDateAndTimestamp(set);
+	return set;
 }
 
 ScalarFunctionSet WeekFun::GetFunctions() {

@@ -1,0 +1,25 @@
+# name: test/sql/function/date/test_date_part_infallible.test
+# description: month and dayofyear of DATE and TIMESTAMP cannot throw: infinities give NULL and the finite extremes work
+# group: [date]
+
+query II
+SELECT month(d), dayofyear(d) FROM (VALUES (DATE '-infinity'), (DATE 'infinity'), (DATE '5877642-06-25 (BC)'), (DATE '5881580-07-10')) t(d)
+----
+NULL	NULL
+NULL	NULL
+6	176
+7	192
+
+query II
+SELECT month(ts), dayofyear(ts) FROM (VALUES (TIMESTAMP '-infinity'), (TIMESTAMP 'infinity'), (TIMESTAMP '290309-12-22 (BC) 00:00:00'), (TIMESTAMP '294247-01-10 04:00:54.775806')) t(ts)
+----
+NULL	NULL
+NULL	NULL
+12	357
+1	10
+
+# the INTERVAL overloads stay fallible
+statement error
+SELECT dayofyear(INTERVAL 1 DAY)
+----
+interval units "doy" not recognized

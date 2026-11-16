@@ -1,0 +1,19 @@
+# name: test/sql/types/timestamp/timestamp_ns_to_us_cast_infallible.test
+# description: Casting TIMESTAMP_NS to TIMESTAMP and TIMESTAMPTZ_NS to TIMESTAMPTZ cannot throw, even at the extremes
+# group: [timestamp]
+
+query IIII
+SELECT CAST(make_timestamp_ns(-9223372036854775807::BIGINT - 1) AS TIMESTAMP),
+       CAST(make_timestamp_ns(9223372036854775806) AS TIMESTAMP),
+       CAST('infinity'::TIMESTAMP_NS AS TIMESTAMP),
+       CAST('-infinity'::TIMESTAMP_NS AS TIMESTAMP)
+----
+1677-09-21 00:12:43.145224	2262-04-11 23:47:16.854776	infinity	-infinity
+
+query IIII
+SELECT CAST('1677-09-21 00:12:43.145224192+00'::TIMESTAMPTZ_NS AS TIMESTAMPTZ) = TIMESTAMPTZ '1677-09-21 00:12:43.145224+00',
+       CAST('2262-04-11 23:47:16.854775806+00'::TIMESTAMPTZ_NS AS TIMESTAMPTZ) = TIMESTAMPTZ '2262-04-11 23:47:16.854776+00',
+       CAST('infinity'::TIMESTAMPTZ_NS AS TIMESTAMPTZ) = TIMESTAMPTZ 'infinity',
+       CAST('-infinity'::TIMESTAMPTZ_NS AS TIMESTAMPTZ) = TIMESTAMPTZ '-infinity'
+----
+true	true	true	true

@@ -462,7 +462,14 @@ struct ICUDatePart : public ICUDateFunc {
 		if (IsBigintDatepart(part_code)) {
 			using data_t = BindAdapterData<int64_t>;
 			auto adapter = PartCodeBigintFactory(part_code);
-			return BindAdapter<data_t>(context, bound_function, arguments, adapter);
+			auto bind_data = make_uniq<data_t>(context, adapter);
+			const auto is_checked_part = part_code == DatePartSpecifier::HOUR ||
+			                             part_code == DatePartSpecifier::MONTH || part_code == DatePartSpecifier::DOY;
+			if (is_checked_part && strcmp(bind_data->calendar->GetType(), "gregorian") == 0) {
+				// DuckDB's timestamp range lies far inside the Gregorian calendar's, so extracting these cannot fail.
+				bound_function.SetErrorMode(FunctionErrors::CANNOT_ERROR);
+			}
+			return std::move(bind_data);
 		} else {
 			using data_t = BindAdapterData<double>;
 			auto adapter = PartCodeDoubleFactory(part_code);
