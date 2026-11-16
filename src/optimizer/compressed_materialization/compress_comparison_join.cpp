@@ -1,5 +1,6 @@
 #include "duckdb/optimizer/compressed_materialization.hpp"
 #include "duckdb/function/cast/cast_statistics.hpp"
+#include "duckdb/main/settings.hpp"
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
@@ -163,8 +164,11 @@ void CompressedMaterialization::CompressComparisonJoin(unique_ptr<LogicalOperato
 		}
 	}
 
+	// With compress_join_keys off, every condition's bindings are marked as referenced below, so the keys stay
+	// the columns they compare
+	const bool compress_keys = Settings::Get<CompressJoinKeysSetting>(context);
 	for (auto &condition : join.conditions) {
-		if (join.conditions.size() == 1 && join.type != LogicalOperatorType::LOGICAL_DELIM_JOIN) {
+		if (compress_keys && join.conditions.size() == 1 && join.type != LogicalOperatorType::LOGICAL_DELIM_JOIN) {
 			const bool compressed_variant_key =
 			    condition.IsComparison() && TryCompressVariantComparisonJoinKey(condition);
 			if (compressed_variant_key) {

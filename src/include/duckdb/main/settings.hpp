@@ -520,6 +520,20 @@ struct CheckpointThresholdSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct CompressJoinKeysSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "compress_join_keys";
+	static constexpr const char *Description =
+	    "Whether compressed materialization compresses the keys of a comparison join. When off, the keys stay the "
+	    "columns they compare, and the join's other columns can still be compressed.";
+	static constexpr const char *InputType = "BOOLEAN";
+	static constexpr bool IsDebug = false;
+	static constexpr bool IsDeprecated = false;
+	static constexpr const char *DefaultValue = "true";
+	static constexpr SettingScopeTarget Scope = SettingScopeTarget::LOCAL_DEFAULT;
+	static constexpr idx_t SettingIndex = NEXT_SETTING_INDEX();
+};
+
 struct CurrentDialectSetting {
 	using RETURN_TYPE = string;
 	static constexpr const char *Name = "current_dialect";
