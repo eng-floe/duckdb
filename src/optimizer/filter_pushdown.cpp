@@ -11,6 +11,7 @@
 #include "duckdb/planner/logical_operator_visitor.hpp"
 #include "duckdb/common/algorithm.hpp"
 #include "duckdb/planner/expression/expression_barrier.hpp"
+#include "duckdb/planner/expression/scan_hint.hpp"
 
 namespace duckdb {
 
@@ -227,6 +228,10 @@ void FilterPushdown::GenerateFilters() {
 		return;
 	}
 	combiner.GenerateFilters([&](unique_ptr<Expression> filter) {
+		// a hint on several columns or none, volatile, or that can throw is dropped
+		if (ScanHint::Is(*filter) && !ScanHint::PushableColumn(*filter)) {
+			return;
+		}
 		auto f = make_uniq<Filter>();
 		f->filter = std::move(filter);
 		f->ExtractBindings();
@@ -236,6 +241,10 @@ void FilterPushdown::GenerateFilters() {
 
 unique_ptr<LogicalOperator> FilterPushdown::AddLogicalFilter(unique_ptr<LogicalOperator> op,
                                                              vector<unique_ptr<Expression>> expressions) {
+	// a hint left above an operator is dropped
+	expressions.erase(std::remove_if(expressions.begin(), expressions.end(),
+	                                 [](const unique_ptr<Expression> &expr) { return ScanHint::Is(*expr); }),
+	                  expressions.end());
 	if (expressions.empty()) {
 		// No left expressions, so needn't to add an extra filter operator.
 		return op;

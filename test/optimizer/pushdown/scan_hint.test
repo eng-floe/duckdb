@@ -1,0 +1,133 @@
+# name: test/optimizer/pushdown/scan_hint.test
+# description: __internal_scan_hint gives the scan its condition as an optional filter, and is true
+# group: [pushdown]
+
+statement ok
+SET threads = 1;
+
+statement ok
+CREATE TABLE t AS SELECT i FROM range(1000000) r(i);
+
+# The condition reaches the scan as an optional filter that skips row groups, and the call leaves the plan. The
+# condition beside it, which implies it, keeps its rows.
+query II
+EXPLAIN ANALYZE SELECT count(*) FROM t WHERE i::VARCHAR LIKE '9_____' AND __internal_scan_hint(i >= 900000);
+----
+analyzed_plan	<REGEX>:.*optional:.*i >= 900000.*Row Groups Scanned: [1-8] / 9.*
+
+query II
+EXPLAIN SELECT count(*) FROM t WHERE i::VARCHAR LIKE '9_____' AND __internal_scan_hint(i >= 900000);
+----
+physical_plan	<!REGEX>:.*__internal_scan_hint.*
+
+query I
+SELECT count(*) FROM t WHERE i::VARCHAR LIKE '9_____' AND __internal_scan_hint(i >= 900000);
+----
+100000
+
+# An exact filter on the same column keeps filtering, beside the optional one
+query II
+EXPLAIN SELECT count(*) FROM t WHERE i >= 500000 AND __internal_scan_hint(i >= 400000);
+----
+physical_plan	<REGEX>:.*i >= 500000. AND optional: .i >= 400000.*
+
+query II
+SELECT count(*), min(i) FROM t WHERE i >= 500000 AND __internal_scan_hint(i >= 400000);
+----
+500000	500000
+
+# It reaches the scan through a projection and a join on its column
+statement ok
+CREATE TABLE u AS SELECT i, i AS j FROM range(1000) r(i);
+
+query II
+EXPLAIN SELECT count(*) FROM (SELECT i AS x FROM t) WHERE x::VARCHAR LIKE '9_____' AND __internal_scan_hint(x >= 900000);
+----
+physical_plan	<REGEX>:.*optional:.*i >= 900000.*
+
+query I
+SELECT count(*) FROM (SELECT i AS x FROM t) WHERE x::VARCHAR LIKE '9_____' AND __internal_scan_hint(x >= 900000);
+----
+100000
+
+query II
+EXPLAIN SELECT count(*) FROM t JOIN u ON t.i = u.i WHERE t.i::VARCHAR LIKE '9__' AND __internal_scan_hint(t.i >= 900);
+----
+physical_plan	<REGEX>:.*optional:.*i >= 900.*
+
+query I
+SELECT count(*) FROM t JOIN u ON t.i = u.i WHERE t.i::VARCHAR LIKE '9__' AND __internal_scan_hint(t.i >= 900);
+----
+100
+
+# A hint on several columns, volatile, or that can throw is dropped, as is one above an aggregate, or two
+# columns under a projection
+query II
+EXPLAIN SELECT count(*) FROM t a JOIN t b ON a.i = b.i WHERE a.i + b.i > 10 AND __internal_scan_hint(a.i + b.i > 10);
+----
+physical_plan	<!REGEX>:.*__internal_scan_hint.*
+
+query II
+EXPLAIN SELECT count(*) FROM t WHERE __internal_scan_hint(i > random());
+----
+physical_plan	<!REGEX>:.*(__internal_scan_hint|optional:).*
+
+query II
+EXPLAIN SELECT count(*) FROM t WHERE __internal_scan_hint(i::VARCHAR::INTEGER > 5);
+----
+physical_plan	<!REGEX>:.*(__internal_scan_hint|optional:).*
+
+query II
+EXPLAIN SELECT count(*) FROM (SELECT i + j AS x FROM u) WHERE x > 5 AND __internal_scan_hint(x > 5);
+----
+physical_plan	<!REGEX>:.*(__internal_scan_hint|optional:).*
+
+query II
+EXPLAIN SELECT * FROM (SELECT i % 10 AS g, count(*) AS c FROM t GROUP BY g) WHERE c > 1 AND __internal_scan_hint(c > 1);
+----
+physical_plan	<!REGEX>:.*__internal_scan_hint.*
+
+# A secure view's hidden rows decide nothing: a hint into it is dropped
+statement ok
+CREATE SECURE VIEW evens AS SELECT i FROM t WHERE i % 2 = 0;
+
+query I
+SELECT count(*) FROM evens WHERE __internal_scan_hint(i >= 900000);
+----
+500000
+
+# A scan that takes no expression filter gets none
+require parquet
+
+statement ok
+COPY t TO '__TEST_DIR__/scan_hint.parquet';
+
+query II
+EXPLAIN SELECT count(*) FROM read_single_parquet_file('__TEST_DIR__/scan_hint.parquet') WHERE i::VARCHAR LIKE '9_____' AND __internal_scan_hint(i >= 900000);
+----
+physical_plan	<!REGEX>:.*(__internal_scan_hint|optional:).*
+
+# It does not pass an aggregate or a window: skipping some rows of a group or a partition would change the values the
+# other conditions are checked on. Row group 0 holds g = 0 with x = 0, row group 1 the other
+# rows with x = 1000: the group g = 0 keeps min(x) = 0.
+statement ok
+CREATE TABLE grouped AS SELECT (i >= 184320)::INT AS g, CASE WHEN i < 122880 THEN 0 ELSE 1000 END AS x FROM range(245760) r(i);
+
+query I
+SELECT g FROM grouped GROUP BY g HAVING min(x) > 100 AND __internal_scan_hint(g > 0);
+----
+1
+
+query I
+SELECT DISTINCT g FROM (SELECT g, min(x) OVER (PARTITION BY g) AS m FROM grouped) WHERE m > 100 AND __internal_scan_hint(g > 0);
+----
+1
+
+# Where it stays, as without filter pushdown, the call is true; a NULL condition, folded, is true too
+statement ok
+SET disabled_optimizers = 'filter_pushdown';
+
+query I
+SELECT count(*) FROM t WHERE __internal_scan_hint(i < 0) AND __internal_scan_hint(NULL);
+----
+1000000

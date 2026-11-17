@@ -1,5 +1,6 @@
 #include "duckdb/optimizer/filter_pushdown.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/scan_hint.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_empty_result.hpp"
@@ -44,6 +45,10 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownAggregate(unique_ptr<Logical
 	FilterPushdown child_pushdown(optimizer, convert_mark_joins, projection_mode);
 	for (idx_t i = 0; i < filters.size(); i++) {
 		auto &f = *filters[i];
+		// a hint skips only some of a group's rows, which would change the group's aggregates
+		if (ScanHint::Is(*f.filter)) {
+			continue;
+		}
 		if (f.bindings.find(aggr.aggregate_index) != f.bindings.end()) {
 			// filter on aggregate: cannot pushdown
 			continue;

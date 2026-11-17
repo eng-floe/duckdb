@@ -30,6 +30,14 @@
         "type": "scalar_function"
     },
     {
+        "name": "__internal_scan_hint",
+        "struct": "ScanHintFun",
+        "parameters": "condition",
+        "description": "Returns true, and marks condition as a hint the scan may skip data by",
+        "example": "__internal_scan_hint(i > 42)",
+        "type": "scalar_function"
+    },
+    {
         "name": "create_sort_key",
         "parameters": "key1,...",
         "description": "Constructs a binary-comparable sort key based on a set of input parameters and sort qualifiers",

@@ -2,6 +2,7 @@
 #include "duckdb/optimizer/optimizer.hpp"
 #include "duckdb/planner/expression/expression_barrier.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/scan_hint.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/operator/logical_empty_result.hpp"
 #include "duckdb/planner/operator/logical_secure_view.hpp"
@@ -45,6 +46,10 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownSecureView(unique_ptr<Logica
 	FilterPushdown child_pushdown(optimizer, convert_mark_joins, projection_mode);
 	for (auto &f : filters) {
 		auto expr = std::move(f->filter);
+		// rows the view hides would decide what a hint skips
+		if (ScanHint::Is(*expr)) {
+			continue;
+		}
 		if (secure_view.has_source) {
 			auto source_filter = expr->Copy();
 			if (!RetainSecureViewFilter(source_filter, secure_view)) {

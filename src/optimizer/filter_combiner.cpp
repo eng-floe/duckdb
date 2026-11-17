@@ -16,6 +16,7 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression/scan_hint.hpp"
 #include "duckdb/planner/filter/expression_filter.hpp"
 #include "duckdb/planner/filter/table_filter_functions.hpp"
 #include "duckdb/planner/table_filter.hpp"
@@ -1041,6 +1042,20 @@ FilterPushdownResult FilterCombiner::TryPushdownTemporalCastFilter(TableFilterSe
 		push_optional(ExpressionType::COMPARE_LESSTHANOREQUALTO, std::move(upper));
 	}
 	return FilterPushdownResult::PUSHED_DOWN_PARTIALLY;
+}
+
+void FilterCombiner::PushdownScanHint(LogicalGet &get, const Expression &hint) {
+	auto column = ScanHint::PushableColumn(hint);
+	if (!column || !get.function.pushdown_expression) {
+		return;
+	}
+	auto condition = ScanHint::Condition(hint).Copy();
+	if (!get.function.pushdown_expression(context, get, *condition)) {
+		return;
+	}
+	ReplaceWithBoundReference(condition);
+	get.table_filters.PushFilter(column->Binding().column_index,
+	                             CreateOptionalExpressionFilter(std::move(condition), column->GetReturnType()));
 }
 
 FilterPushdownResult FilterCombiner::TryPushdownExpression(TableFilterSet &table_filters,

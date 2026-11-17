@@ -7,6 +7,7 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_empty_result.hpp"
 #include "duckdb/planner/expression/expression_barrier.hpp"
+#include "duckdb/planner/expression/scan_hint.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 
 namespace duckdb {
@@ -180,6 +181,13 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownGet(unique_ptr<LogicalOperat
 			continue;
 		}
 		auto &expr = *filters[i]->filter;
+		if (ScanHint::Is(expr)) {
+			combiner.PushdownScanHint(get, expr);
+			filters.erase_at(i);
+			pushdown_results.erase_at(i);
+			i--;
+			continue;
+		}
 		if (expr.IsVolatile()) {
 			continue;
 		}

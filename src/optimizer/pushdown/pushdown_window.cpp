@@ -4,6 +4,7 @@
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_window_expression.hpp"
+#include "duckdb/planner/expression/scan_hint.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/operator/logical_window.hpp"
 
@@ -79,7 +80,9 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownWindow(unique_ptr<LogicalOpe
 		// the filter must be on all partition bindings
 		vector<ColumnBinding> bindings;
 		ExtractFilterBindings(*filters.at(i)->filter, bindings);
-		if (CanPushdownFilter(window_exprs_partition_bindings, bindings) && !filters.at(i)->filter->IsVolatile()) {
+		// a hint skips only some of a partition's rows, which would change its window values
+		if (CanPushdownFilter(window_exprs_partition_bindings, bindings) && !filters.at(i)->filter->IsVolatile() &&
+		    !ScanHint::Is(*filters.at(i)->filter)) {
 			pushdown.filters.push_back(std::move(filters.at(i)));
 		} else {
 			leftover_filters.push_back(std::move(filters.at(i)));

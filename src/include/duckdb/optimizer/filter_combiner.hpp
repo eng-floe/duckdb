@@ -60,6 +60,8 @@ public:
 	                                        vector<FilterPushdownResult> &pushdown_results);
 
 	FilterPushdownResult TryPushdownGenericExpression(LogicalGet &get, Expression &expr);
+	//! Gives the scan a hint's condition as an optional filter, if the scan takes the condition
+	void PushdownScanHint(LogicalGet &get, const Expression &hint);
 
 private:
 	FilterResult AddFilter(Expression &expr);

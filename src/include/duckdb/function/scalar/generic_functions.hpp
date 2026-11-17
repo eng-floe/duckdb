@@ -55,6 +55,16 @@ struct BarrierFun {
 	static ScalarFunction GetFunction();
 };
 
+struct ScanHintFun {
+	static constexpr const char *Name = "__internal_scan_hint";
+	static constexpr const char *Parameters = "condition";
+	static constexpr const char *Description = "Returns true, and marks condition as a hint the scan may skip data by";
+	static constexpr const char *Example = "__internal_scan_hint(i > 42)";
+	static constexpr const char *Categories = "";
+
+	static ScalarFunction GetFunction();
+};
+
 struct CreateSortKeyFun {
 	static constexpr const char *Name = "create_sort_key";
 	static constexpr const char *Parameters = "key1,...";
