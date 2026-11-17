@@ -603,10 +603,16 @@ FilterPushdownResult FilterCombiner::TryPushdownLikeFilter(TableFilterSet &table
 		return FilterPushdownResult::PUSHED_DOWN_FULLY;
 	}
 	if (case_insensitive) {
+		if (equality) {
+			//! Remote scans can use equality ignoring case for case-insensitive index pruning.
+			auto filter_expr = expr.Copy();
+			ReplaceWithBoundReference(filter_expr);
+			table_filters.PushFilter(proj_index, make_uniq<ExpressionFilter>(std::move(filter_expr)));
+		}
 		string min_prefix;
 		string max_prefix;
 		if (!GetCaseInsensitivePrefixBounds(prefix, min_prefix, max_prefix)) {
-			return FilterPushdownResult::NO_PUSHDOWN;
+			return equality ? FilterPushdownResult::PUSHED_DOWN_PARTIALLY : FilterPushdownResult::NO_PUSHDOWN;
 		}
 		auto lower_bound = CreateComparisonExpression(
 		    *func.GetChildren()[0], ExpressionType::COMPARE_GREATERTHANOREQUALTO, Value(std::move(min_prefix)));
