@@ -581,7 +581,9 @@ FilterPushdownResult FilterCombiner::TryPushdownLikeFilter(TableFilterSet &table
 		//! There is no ordered prefix bound, but remote scans can use the full
 		//! expression for conservative substring-index pruning. The original
 		//! expression remains above the scan because this is only partial.
-		table_filters.PushFilter(proj_index, make_uniq<ExpressionFilter>(expr.Copy()));
+		auto filter_expr = expr.Copy();
+		ReplaceWithBoundReference(filter_expr);
+		table_filters.PushFilter(proj_index, make_uniq<ExpressionFilter>(std::move(filter_expr)));
 		return FilterPushdownResult::PUSHED_DOWN_PARTIALLY;
 	}
 	string prefix;
