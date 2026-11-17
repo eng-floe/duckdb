@@ -206,6 +206,10 @@ void SimpleTimeZone::GetOffsetFromLocal(int64_t millis, LocalOption non_existing
 	dst_offset_out = GetOffsetForFields(year, month, dom, dow, mid) - raw_offset;
 }
 
+bool SimpleTimeZone::IsAlwaysUTC() const {
+	return raw_offset == 0 && !use_daylight;
+}
+
 unique_ptr<TimeZone> SimpleTimeZone::Copy() const {
 	return unique_ptr<TimeZone>(new SimpleTimeZone(*this));
 }
@@ -283,6 +287,13 @@ void OlsonTimeZone::GetOffsetFromLocal(int64_t millis, LocalOption non_existing,
 	} else {
 		GetHistoricalOffset(millis, true, non_existing, duplicated, raw_offset, dst_offset);
 	}
+}
+
+bool OlsonTimeZone::IsAlwaysUTC() const {
+	// a zone that ever had a transition had another offset before or after it, local mean time among them
+	const auto &initial = OffsetsAt(-1);
+	return data.transition_count == 0 && initial.raw_offset == 0 && initial.dst_offset == 0 &&
+	       (!final_zone || final_zone->IsAlwaysUTC());
 }
 
 unique_ptr<TimeZone> OlsonTimeZone::Copy() const {

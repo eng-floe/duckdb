@@ -48,6 +48,9 @@ public:
 	bool Equals(const TimeZone &other) const {
 		return id == other.id;
 	}
+	//! Whether the offset is zero at every instant, the zone never changing it: its local fields are always UTC's
+	virtual bool IsAlwaysUTC() const = 0;
+
 	virtual unique_ptr<TimeZone> Copy() const = 0;
 
 protected:
@@ -68,6 +71,7 @@ public:
 	void GetOffset(int64_t millis, int32_t &raw_offset, int32_t &dst_offset) const override;
 	void GetOffsetFromLocal(int64_t millis, LocalOption non_existing, LocalOption duplicated, int32_t &raw_offset,
 	                        int32_t &dst_offset) const override;
+	bool IsAlwaysUTC() const override;
 	unique_ptr<TimeZone> Copy() const override;
 
 private:
@@ -109,6 +113,7 @@ public:
 	void GetOffset(int64_t millis, int32_t &raw_offset, int32_t &dst_offset) const override;
 	void GetOffsetFromLocal(int64_t millis, LocalOption non_existing, LocalOption duplicated, int32_t &raw_offset,
 	                        int32_t &dst_offset) const override;
+	bool IsAlwaysUTC() const override;
 	unique_ptr<TimeZone> Copy() const override;
 
 private:

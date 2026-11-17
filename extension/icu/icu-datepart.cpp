@@ -465,7 +465,9 @@ struct ICUDatePart : public ICUDateFunc {
 			auto bind_data = make_uniq<data_t>(context, adapter);
 			const auto is_checked_part = part_code == DatePartSpecifier::HOUR ||
 			                             part_code == DatePartSpecifier::MONTH || part_code == DatePartSpecifier::DOY;
-			if (is_checked_part && strcmp(bind_data->calendar->GetType(), "gregorian") == 0) {
+			const auto *type = bind_data->calendar->GetType();
+			// ISO 8601 is the Gregorian calendar with other weeks: it computes these alike.
+			if (is_checked_part && (strcmp(type, "gregorian") == 0 || strcmp(type, "iso8601") == 0)) {
 				// DuckDB's timestamp range lies far inside the Gregorian calendar's, so extracting these cannot fail.
 				bound_function.SetErrorMode(FunctionErrors::CANNOT_ERROR);
 			}
