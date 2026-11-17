@@ -162,7 +162,7 @@ struct FilterGroupTest {
 	                   vector<LogicalType> {LogicalType::INTEGER, LogicalType::INTEGER},
 	                   vector<ColumnIndex> {ColumnIndex(0), ColumnIndex(1)}, vector<idx_t> {0, 1},
 	                   vector<string> {"a", "b"}, nullptr, 100, ExtraOperatorInfo(), vector<Value> {},
-	                   virtual_column_map_t {})
+	                   virtual_column_map_t {}, TableIndex(0))
 	               .Cast<PhysicalTableScan>()) {
 	}
 
