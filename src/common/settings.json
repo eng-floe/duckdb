@@ -258,7 +258,7 @@
         "description": "Whether compressed materialization compresses the keys of a comparison join. When off, the keys stay the columns they compare, and the join's other columns can still be compressed.",
         "type": "BOOLEAN",
         "default_scope": "local",
-        "default_value": "true"
+        "default_value": "false"
     },
     {
         "name": "current_dialect",
