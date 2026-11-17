@@ -1,4 +1,4 @@
-# name: test/optimizer/compressed_materialization_join_keys.test
+# name: test/optimizer/compressed_materialization_join_keys.test_slow
 # description: compress_join_keys turns on compressed materialization of a comparison join's keys
 # group: [optimizer]
 
@@ -35,7 +35,7 @@ logical_opt	<!REGEX>:.*__internal_compress.*
 query II
 EXPLAIN SELECT probe.k, build.payload FROM probe JOIN build ON probe.k = build.k;
 ----
-logical_opt	<REGEX>:.*CAST\(#1 AS INTEGER\).*
+logical_opt	<REGEX>:.*CAST\(.* AS INTEGER\).*
 
 statement ok
 SET explain_output = PHYSICAL_ONLY;

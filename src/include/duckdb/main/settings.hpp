@@ -961,18 +961,6 @@ struct DebugVerifySerializerSetting {
 	static constexpr idx_t SettingIndex = NEXT_SETTING_INDEX();
 };
 
-struct DebugVerifyTableNamesSetting {
-	using RETURN_TYPE = bool;
-	static constexpr const char *Name = "debug_verify_table_names";
-	static constexpr const char *Description = "Verify names-only binding.";
-	static constexpr const char *InputType = "BOOLEAN";
-	static constexpr bool IsDebug = true;
-	static constexpr bool IsDeprecated = false;
-	static constexpr const char *DefaultValue = "false";
-	static constexpr SettingScopeTarget Scope = SettingScopeTarget::GLOBAL_DEFAULT;
-	static constexpr idx_t SettingIndex = NEXT_SETTING_INDEX();
-};
-
 struct DebugVerifyStatementSetting {
 	using RETURN_TYPE = DebugStatementVerification;
 	static constexpr const char *Name = "debug_verify_statement";
@@ -990,6 +978,18 @@ struct DebugVerifyStatsSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "debug_verify_stats";
 	static constexpr const char *Description = "Verify that statistics are correct during execution.";
+	static constexpr const char *InputType = "BOOLEAN";
+	static constexpr bool IsDebug = true;
+	static constexpr bool IsDeprecated = false;
+	static constexpr const char *DefaultValue = "false";
+	static constexpr SettingScopeTarget Scope = SettingScopeTarget::GLOBAL_DEFAULT;
+	static constexpr idx_t SettingIndex = NEXT_SETTING_INDEX();
+};
+
+struct DebugVerifyTableNamesSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "debug_verify_table_names";
+	static constexpr const char *Description = "Verify names-only binding.";
 	static constexpr const char *InputType = "BOOLEAN";
 	static constexpr bool IsDebug = true;
 	static constexpr bool IsDeprecated = false;

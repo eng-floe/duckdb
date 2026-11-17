@@ -578,6 +578,14 @@
         "is_debug": true
     },
     {
+        "name": "debug_verify_table_names",
+        "description": "Verify names-only binding.",
+        "type": "BOOLEAN",
+        "default_scope": "global",
+        "default_value": "false",
+        "is_debug": true
+    },
+    {
         "name": "debug_verify_vector",
         "description": "Enable a specific type of vector verification.",
         "type": "ENUM<DebugVectorVerification>",
