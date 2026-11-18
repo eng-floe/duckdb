@@ -1096,7 +1096,17 @@ void QueryProfiler::GetTreeMapUnderLock(const std::function<void(optional_ptr<co
 
 void QueryProfiler::EndPlan() {
 	lock_guard<std::mutex> guard(lock);
+	if (plan_alive && on_plan_end) {
+		// Finalized first, as PhysicalExplainAnalyze finalizes before it reads, so both read the same profile.
+		FinalizeMetricsInternal();
+		on_plan_end(tree_map);
+	}
 	plan_alive = false;
+}
+
+void QueryProfiler::OnPlanEnd(std::function<void(const TreeMap &)> callback) {
+	lock_guard<std::mutex> guard(lock);
+	on_plan_end = std::move(callback);
 }
 
 void QueryProfiler::Render(const ProfilingNode &node, BaseTreeRenderer &ss) const {

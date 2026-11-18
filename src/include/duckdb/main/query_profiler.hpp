@@ -193,6 +193,9 @@ public:
 	DUCKDB_API void GetTreeMapUnderLock(const std::function<void(optional_ptr<const TreeMap>)> &callback) const;
 	//! Marks the plan the tree map refers to as freed, called before the plan is destroyed
 	DUCKDB_API void EndPlan();
+	//! Sets the one callback EndPlan runs, with the tree map under the lock and the metrics finalized, so a query
+	//! that is not an EXPLAIN ANALYZE can still be read as one. Set before the query runs; must not throw.
+	DUCKDB_API void OnPlanEnd(std::function<void(const TreeMap &)> callback);
 	//! Provides access to the finalized metrics and query tree of the last profiled query, both null while a query is
 	//! running or when there are none, and ensures there are no concurrent modifications
 	DUCKDB_API void GetFinalizedProfileUnderLock(
@@ -224,6 +227,8 @@ private:
 	TreeMap tree_map;
 	//! Whether the plan the tree map refers to is still alive
 	bool plan_alive = false;
+	//! What EndPlan reads the last profile of the plan with, if anything
+	std::function<void(const TreeMap &)> on_plan_end;
 	//! Whether or not we are running as part of a explain_analyze query
 	bool is_explain_analyze;
 	//! Whether root metrics have been finalized for output
