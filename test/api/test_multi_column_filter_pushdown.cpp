@@ -170,9 +170,7 @@ void RequireLocallyBound(const Expression &expr) {
 	if (expr.GetExpressionClass() == ExpressionClass::BOUND_REF) {
 		REQUIRE(expr.Cast<BoundReferenceExpression>().Index() == 0);
 	}
-	ExpressionIterator::EnumerateChildren(expr, [&](const Expression &child) {
-		RequireLocallyBound(child);
-	});
+	ExpressionIterator::EnumerateChildren(expr, [&](const Expression &child) { RequireLocallyBound(child); });
 }
 
 } // namespace
