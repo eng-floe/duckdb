@@ -33,9 +33,9 @@ unique_ptr<FunctionData> MultiColumnScanBind(ClientContext &, TableFunctionBindI
 void MultiColumnScanFunction(ClientContext &, TableFunctionInput &, DataChunk &) {
 }
 
-//! Accepts every single-column expression offered to the scan
-bool MultiColumnScanPushdownExpression(ClientContext &, const LogicalGet &, Expression &) {
-	return true;
+//! Takes every expression offered to the scan that cannot throw
+bool MultiColumnScanPushdownExpression(ClientContext &, const LogicalGet &, Expression &expr) {
+	return !expr.CanThrow();
 }
 
 //! Exposes one virtual INTEGER column, v
@@ -45,16 +45,12 @@ virtual_column_map_t MultiColumnScanVirtualColumns(ClientContext &, optional_ptr
 	return result;
 }
 
-//! The test scan, taking multi-column filters when multi_column_filter_pushdown is set and consulting
-//! MultiColumnScanPushdownExpression when with_pushdown_expression is set
-TableFunction MultiColumnScan(const char *name, bool multi_column_filter_pushdown,
-                              bool with_pushdown_expression = true) {
+//! The test scan, offered multi-column filters when multi_column_filter_pushdown is set
+TableFunction MultiColumnScan(const char *name, bool multi_column_filter_pushdown) {
 	TableFunction function(name, {}, MultiColumnScanFunction, MultiColumnScanBind);
 	function.projection_pushdown = true;
 	function.filter_pushdown = true;
-	if (with_pushdown_expression) {
-		function.pushdown_expression = MultiColumnScanPushdownExpression;
-	}
+	function.pushdown_expression = MultiColumnScanPushdownExpression;
 	function.get_virtual_columns = MultiColumnScanVirtualColumns;
 	function.multi_column_filter_pushdown = multi_column_filter_pushdown;
 	return function;
@@ -68,13 +64,11 @@ void SameWithinQuery(DataChunk &args, ExpressionState &, Vector &result) {
 
 //! An in-memory database with the test scans and the same_within_query function registered
 struct ScanFixture {
-	//! Registers offering_scan (flag set), plain_scan (flag not set), offering_scan_without_callback (flag set, no
-	//! pushdown_expression) and same_within_query
+	//! Registers offering_scan (flag set), plain_scan (flag not set) and same_within_query
 	ScanFixture() : db(nullptr), con(db) {
 		ExtensionLoader loader(*db.instance, "multi_column_filter_pushdown_test");
 		loader.RegisterFunction(MultiColumnScan("offering_scan", true));
 		loader.RegisterFunction(MultiColumnScan("plain_scan", false));
-		loader.RegisterFunction(MultiColumnScan("offering_scan_without_callback", true, false));
 		ScalarFunction same_within_query("same_within_query", {LogicalType::INTEGER, LogicalType::INTEGER},
 		                                 LogicalType::BOOLEAN, SameWithinQuery);
 		same_within_query.SetStability(FunctionStability::CONSISTENT_WITHIN_QUERY);
@@ -103,6 +97,7 @@ optional_ptr<LogicalFilter> FindFilterOnGet(LogicalOperator &op) {
 
 //! A planned query with the filter on its scan and the scan itself
 struct PlannedScan {
+	string query;
 	unique_ptr<LogicalOperator> plan;
 	optional_ptr<LogicalFilter> filter;
 	optional_ptr<LogicalGet> get;
@@ -112,6 +107,7 @@ struct PlannedScan {
 PlannedScan PlanScan(Connection &con, const string &query) {
 	CAPTURE(query);
 	PlannedScan result;
+	result.query = query;
 	result.plan = con.ExtractPlan(query);
 	result.filter = FindFilterOnGet(*result.plan);
 	REQUIRE(result.filter);
@@ -120,9 +116,8 @@ PlannedScan PlanScan(Connection &con, const string &query) {
 }
 
 //! Requires the query's filter is kept above the scan and offered to it as one filter over two columns
-void RequireOffered(Connection &con, const string &query) {
-	CAPTURE(query);
-	auto scan = PlanScan(con, query);
+void RequireOffered(const PlannedScan &scan) {
+	CAPTURE(scan.query);
 	REQUIRE(!scan.filter->expressions.empty());
 	auto &multi_column_filters = scan.get->table_filters.GetMultiColumnFilters();
 	REQUIRE(multi_column_filters.size() == 1);
@@ -131,9 +126,8 @@ void RequireOffered(Connection &con, const string &query) {
 }
 
 //! Requires the query's filter is kept above the scan and the scan receives no multi-column filter
-void RequireNotOffered(Connection &con, const string &query) {
-	CAPTURE(query);
-	auto scan = PlanScan(con, query);
+void RequireNotOffered(const PlannedScan &scan) {
+	CAPTURE(scan.query);
 	REQUIRE(!scan.filter->expressions.empty());
 	REQUIRE(scan.get->table_filters.GetMultiColumnFilters().empty());
 }
@@ -145,17 +139,17 @@ TEST_CASE("A scan offering multi-column filters receives them as partial filters
 	auto &con = fixture.con;
 	con.BeginTransaction();
 
-	RequireOffered(con, "SELECT c FROM offering_scan() WHERE a = 1 OR b = 2");
-	RequireOffered(con, "SELECT c FROM offering_scan() WHERE a < b");
-	RequireOffered(con, "SELECT c FROM offering_scan() WHERE a IS NULL OR b = 2");
-	RequireOffered(con, "SELECT c FROM offering_scan() WHERE NOT (a = b)");
-	RequireOffered(con, "SELECT c FROM offering_scan() WHERE a IN (1, 2) OR b = 3");
+	RequireOffered(PlanScan(con, "SELECT c FROM offering_scan() WHERE a = 1 OR b = 2"));
+	RequireOffered(PlanScan(con, "SELECT c FROM offering_scan() WHERE a < b"));
+	RequireOffered(PlanScan(con, "SELECT c FROM offering_scan() WHERE a IS NULL OR b = 2"));
+	RequireOffered(PlanScan(con, "SELECT c FROM offering_scan() WHERE NOT (a = b)"));
+	RequireOffered(PlanScan(con, "SELECT c FROM offering_scan() WHERE a IN (1, 2) OR b = 3"));
 
 	// negating a DECIMAL cannot throw
 	auto arithmetic = PlanScan(con, "SELECT c FROM offering_scan() WHERE -e < f");
 	REQUIRE(arithmetic.filter->expressions.size() == 1);
 	REQUIRE(!arithmetic.filter->expressions[0]->CanThrow());
-	RequireOffered(con, "SELECT c FROM offering_scan() WHERE -e < f");
+	RequireOffered(arithmetic);
 
 	con.Rollback();
 }
@@ -169,34 +163,31 @@ TEST_CASE("A scan receives no multi-column filter it cannot take", "[api][multi_
 		auto scan = PlanScan(con, "SELECT c FROM offering_scan() WHERE a < b + random()");
 		REQUIRE(scan.filter->expressions.size() == 1);
 		REQUIRE(scan.filter->expressions[0]->IsVolatile());
-		RequireNotOffered(con, "SELECT c FROM offering_scan() WHERE a < b + random()");
+		RequireNotOffered(scan);
 	}
-	SECTION("can throw") {
+	SECTION("the scan refuses it") {
+		// consistent, so it is offered to pushdown_expression, which refuses it because it can throw
 		auto scan = PlanScan(con, "SELECT c FROM offering_scan() WHERE a + b > 5");
 		REQUIRE(scan.filter->expressions.size() == 1);
 		REQUIRE(scan.filter->expressions[0]->CanThrow());
 		REQUIRE(scan.filter->expressions[0]->IsConsistent());
-		RequireNotOffered(con, "SELECT c FROM offering_scan() WHERE a + b > 5");
+		RequireNotOffered(scan);
 	}
 	SECTION("consistent only within the query") {
-		auto query = "SELECT c FROM offering_scan() WHERE same_within_query(a, b)";
-		auto scan = PlanScan(con, query);
+		auto scan = PlanScan(con, "SELECT c FROM offering_scan() WHERE same_within_query(a, b)");
 		REQUIRE(scan.filter->expressions.size() == 1);
 		auto &expr = *scan.filter->expressions[0];
 		REQUIRE(!expr.IsVolatile());
 		REQUIRE(!expr.CanThrow());
 		REQUIRE(!expr.IsConsistent());
-		RequireNotOffered(con, query);
+		RequireNotOffered(scan);
 	}
 	SECTION("virtual column") {
-		RequireNotOffered(con, "SELECT c FROM offering_scan() WHERE a < v");
+		RequireNotOffered(PlanScan(con, "SELECT c FROM offering_scan() WHERE a < v"));
 	}
 	SECTION("flag off") {
-		RequireNotOffered(con, "SELECT c FROM plain_scan() WHERE a = 1 OR b = 2");
-		RequireNotOffered(con, "SELECT c FROM plain_scan() WHERE a < b");
-	}
-	SECTION("flag set without pushdown_expression") {
-		RequireNotOffered(con, "SELECT c FROM offering_scan_without_callback() WHERE a = 1 OR b = 2");
+		RequireNotOffered(PlanScan(con, "SELECT c FROM plain_scan() WHERE a = 1 OR b = 2"));
+		RequireNotOffered(PlanScan(con, "SELECT c FROM plain_scan() WHERE a < b"));
 	}
 
 	con.Rollback();

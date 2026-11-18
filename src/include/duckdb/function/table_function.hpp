@@ -563,9 +563,8 @@ public:
 	bool sampling_pushdown;
 	//! Whether or not the table function supports late materialization
 	bool late_materialization;
-	//! Whether the scan receives every consistent, non-throwing expression over several of its columns as a partial
-	//! filter, which the FILTER above it still applies. pushdown_expression is not consulted for these expressions but
-	//! must be set; the scan must ignore any expression it cannot evaluate.
+	//! Whether multi-column expressions are offered to pushdown_expression; an accepted one is pushed as a partial
+	//! filter that the FILTER above still applies.
 	bool multi_column_filter_pushdown;
 	TableFunctionReturnType return_type;
 	//! The return type used when this function is invoked through a CALL statement
