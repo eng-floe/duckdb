@@ -1646,7 +1646,7 @@ static unique_ptr<Expression> CreateRuntimeFilterExpression(ClientContext &conte
 		}
 		filter_expr = make_uniq<BoundFunctionExpression>(
 		    BoundScalarFunction(PrefixRangeScalarFun::GetFunction(filter_input_type)), std::move(children),
-		    make_uniq<PrefixRangeFunctionData>(prefix_range_filter, filters_null_values, key_name, key_type,
+		    make_uniq<PrefixRangeFunctionData>(std::move(prefix_range_filter), filters_null_values, key_name, key_type,
 		                                       selectivity_threshold, n_vectors_to_check));
 		break;
 	}

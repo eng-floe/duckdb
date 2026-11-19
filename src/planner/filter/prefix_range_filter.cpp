@@ -7,10 +7,10 @@
 
 namespace duckdb {
 
-LegacyPrefixRangeTableFilter::LegacyPrefixRangeTableFilter(optional_ptr<PrefixRangeFilter> filter_p,
+LegacyPrefixRangeTableFilter::LegacyPrefixRangeTableFilter(shared_ptr<const PrefixRangeFilter> filter_p,
                                                            const string &key_column_name_p,
                                                            const LogicalType &key_type_p)
-    : TableFilter(TYPE), filter(filter_p), key_column_name(key_column_name_p), key_type(key_type_p) {
+    : TableFilter(TYPE), filter(std::move(filter_p)), key_column_name(key_column_name_p), key_type(key_type_p) {
 }
 
 unique_ptr<Expression> LegacyPrefixRangeTableFilter::ToExpression(const Expression &column) const {

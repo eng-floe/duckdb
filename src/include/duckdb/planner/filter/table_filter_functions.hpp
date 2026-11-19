@@ -163,6 +163,8 @@ struct BloomFilterFunctionData : public FunctionData {
 };
 
 //! Runtime prefix-range filter state used by join pushdown and internal tablefilter functions.
+//! The bitmap is allocated by the buffer manager of the database the filter was initialized in, so the last
+//! reference to an initialized filter must be dropped while that database is alive.
 class PrefixRangeFilter {
 public:
 	struct BuildState {
@@ -200,11 +202,12 @@ public:
 
 //! FunctionData for prefix range internal function
 struct PrefixRangeFunctionData : public FunctionData {
-	PrefixRangeFunctionData(optional_ptr<PrefixRangeFilter> filter_p, bool filters_null_values_p,
+	PrefixRangeFunctionData(shared_ptr<const PrefixRangeFilter> filter_p, bool filters_null_values_p,
 	                        const string &key_column_name_p, const LogicalType &key_type_p,
 	                        float selectivity_threshold_p, idx_t n_vectors_to_check_p);
 
-	optional_ptr<PrefixRangeFilter> filter;
+	//! The published filter, shared with the join that built it; null when the function carries no filter.
+	shared_ptr<const PrefixRangeFilter> filter;
 	bool filters_null_values;
 	string key_column_name;
 	LogicalType key_type;

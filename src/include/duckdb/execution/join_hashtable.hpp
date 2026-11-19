@@ -561,7 +561,8 @@ private:
 	//! Whether finalize should build the bloom filter from the materialized build side
 	bool should_build_bloom_filter = false;
 
-	unique_ptr<PrefixRangeFilter> prefix_range_filter;
+	//! Mutable while the build fills it; scans share it read-only through GetPrefixRangeFilter
+	shared_ptr<PrefixRangeFilter> prefix_range_filter;
 	bool should_build_prefix_range_filter = false;
 
 	//! Copying not allowed
@@ -663,7 +664,8 @@ public:
 		return bloom_filter && bloom_filter->IsSealed() && bloom_filter->IsUseful();
 	}
 
-	void SetPrefixRangeFilter(unique_ptr<PrefixRangeFilter> filter) {
+	//! Installs the prefix range filter the build fills; the caller must not keep a mutable reference to it.
+	void SetPrefixRangeFilter(shared_ptr<PrefixRangeFilter> filter) {
 		prefix_range_filter = std::move(filter);
 	}
 
@@ -671,7 +673,9 @@ public:
 		should_build_prefix_range_filter = true;
 	}
 
-	optional_ptr<PrefixRangeFilter> GetPrefixRangeFilter() {
+	//! The prefix range filter as published to scans: read-only, and alive for as long as a holder keeps it,
+	//! also after the table drops its own reference. Null when the table has none.
+	shared_ptr<const PrefixRangeFilter> GetPrefixRangeFilter() const {
 		return prefix_range_filter;
 	}
 
