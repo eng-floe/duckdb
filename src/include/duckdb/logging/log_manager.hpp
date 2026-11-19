@@ -87,6 +87,8 @@ protected:
 
 protected:
 	mutex lock;
+	//! Separate from the sink lock: storages can look up schemas while WriteLogEntry holds lock.
+	mutex log_type_lock;
 	LogConfig config;
 
 	shared_ptr<Logger> global_logger;

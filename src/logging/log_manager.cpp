@@ -243,7 +243,6 @@ LogConfig LogManager::GetConfig() {
 }
 
 optional_ptr<const LogType> LogManager::LookupLogType(const string &type) {
-	unique_lock<mutex> lck(lock);
 	return LookupLogTypeInternal(type);
 }
 
@@ -251,6 +250,7 @@ DUCKDB_API void RegisterDefaultLogTypes() {
 }
 
 optional_ptr<const LogType> LogManager::LookupLogTypeInternal(const string &type) {
+	unique_lock<mutex> lck(log_type_lock);
 	auto lookup = registered_log_types.find(type);
 	if (lookup != registered_log_types.end()) {
 		return *lookup->second;
@@ -265,7 +265,7 @@ void LogManager::SetConfigInternal(LogConfig config_p) {
 }
 
 void LogManager::RegisterLogType(unique_ptr<LogType> type) {
-	unique_lock<mutex> lck(lock);
+	unique_lock<mutex> lck(log_type_lock);
 
 	auto lookup = registered_log_types.find(type->name);
 	if (lookup != registered_log_types.end()) {
