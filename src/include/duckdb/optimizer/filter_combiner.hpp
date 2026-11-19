@@ -56,8 +56,7 @@ public:
 	bool HasFilters();
 	void GenerateEquivalentFilters(const Expression &filter,
 	                               const std::function<void(unique_ptr<Expression> filter)> &callback);
-	TableFilterSet GenerateTableScanFilters(const vector<ColumnIndex> &column_ids,
-	                                        vector<FilterPushdownResult> &pushdown_results);
+	TableFilterSet GenerateTableScanFilters(LogicalGet &get, vector<FilterPushdownResult> &pushdown_results);
 
 	FilterPushdownResult TryPushdownGenericExpression(LogicalGet &get, Expression &expr);
 
@@ -72,12 +71,10 @@ private:
 
 	FilterPushdownResult TryPushdownConstantFilter(TableFilterSet &table_filters, const vector<ColumnIndex> &column_ids,
 	                                               column_t column_id, vector<ExpressionValueInformation> &info_list);
-	FilterPushdownResult TryPushdownExpression(TableFilterSet &table_filters, const vector<ColumnIndex> &column_ids,
-	                                           Expression &expr);
+	FilterPushdownResult TryPushdownExpression(LogicalGet &get, TableFilterSet &table_filters, Expression &expr);
 	FilterPushdownResult TryPushdownPrefixFilter(TableFilterSet &table_filters, const vector<ColumnIndex> &column_ids,
 	                                             Expression &expr);
-	FilterPushdownResult TryPushdownLikeFilter(TableFilterSet &table_filters, const vector<ColumnIndex> &column_ids,
-	                                           Expression &expr);
+	FilterPushdownResult TryPushdownLikeFilter(LogicalGet &get, TableFilterSet &table_filters, Expression &expr);
 	FilterPushdownResult TryPushdownInFilter(TableFilterSet &table_filters, const vector<ColumnIndex> &column_ids,
 	                                         Expression &expr);
 	FilterPushdownResult TryPushdownOrClause(TableFilterSet &table_filters, const vector<ColumnIndex> &column_ids,

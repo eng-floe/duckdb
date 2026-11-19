@@ -553,8 +553,8 @@ static bool GetCaseInsensitivePrefixBounds(const string &prefix, string &min_pre
 	return !min_prefix.empty() && Utf8Proc::FindNextLegalUTF8(max_prefix);
 }
 
-FilterPushdownResult FilterCombiner::TryPushdownLikeFilter(TableFilterSet &table_filters,
-                                                           const vector<ColumnIndex> &column_ids, Expression &expr) {
+FilterPushdownResult FilterCombiner::TryPushdownLikeFilter(LogicalGet &get, TableFilterSet &table_filters,
+                                                           Expression &expr) {
 	if (expr.GetExpressionClass() != ExpressionClass::BOUND_FUNCTION) {
 		return FilterPushdownResult::NO_PUSHDOWN;
 	}
@@ -578,14 +578,20 @@ FilterPushdownResult FilterCombiner::TryPushdownLikeFilter(TableFilterSet &table
 	if (constant_value_expr.GetValue().IsNull()) {
 		return FilterPushdownResult::NO_PUSHDOWN;
 	}
-	auto &like_string = StringValue::Get(constant_value_expr.GetValue());
-	if (like_string[0] == '%' || like_string[0] == '_') {
-		//! There is no ordered prefix bound, but scans can use the full expression for conservative
-		//! substring pruning. Keep the original expression above the scan because this is only partial.
+	// Keep the residual when a scan accepts the original predicate for pruning.
+	auto try_push_original = [&] {
+		if (!get.function.partial_like_filter_pushdown || !get.function.pushdown_expression ||
+		    !get.function.pushdown_expression(context, get, expr)) {
+			return false;
+		}
 		auto filter_expr = expr.Copy();
 		ReplaceWithBoundReference(filter_expr);
 		table_filters.PushFilter(proj_index, make_uniq<ExpressionFilter>(std::move(filter_expr)));
-		return FilterPushdownResult::PUSHED_DOWN_PARTIALLY;
+		return true;
+	};
+	auto &like_string = StringValue::Get(constant_value_expr.GetValue());
+	if (!like_string.empty() && (like_string[0] == '%' || like_string[0] == '_')) {
+		return try_push_original() ? FilterPushdownResult::PUSHED_DOWN_PARTIALLY : FilterPushdownResult::NO_PUSHDOWN;
 	}
 	string prefix;
 	bool equality = true;
@@ -604,17 +610,11 @@ FilterPushdownResult FilterCombiner::TryPushdownLikeFilter(TableFilterSet &table
 		return FilterPushdownResult::PUSHED_DOWN_FULLY;
 	}
 	if (case_insensitive) {
-		if (equality) {
-			//! A scan can use the original ILIKE as equality ignoring case. DuckDB still evaluates it above
-			//! the scan because the pushed expression is only a conservative filter.
-			auto filter_expr = expr.Copy();
-			ReplaceWithBoundReference(filter_expr);
-			table_filters.PushFilter(proj_index, make_uniq<ExpressionFilter>(std::move(filter_expr)));
-		}
+		const bool pushed_original = equality && try_push_original();
 		string min_prefix;
 		string max_prefix;
 		if (!GetCaseInsensitivePrefixBounds(prefix, min_prefix, max_prefix)) {
-			return equality ? FilterPushdownResult::PUSHED_DOWN_PARTIALLY : FilterPushdownResult::NO_PUSHDOWN;
+			return pushed_original ? FilterPushdownResult::PUSHED_DOWN_PARTIALLY : FilterPushdownResult::NO_PUSHDOWN;
 		}
 		auto lower_bound = CreateComparisonExpression(
 		    *func.GetChildren()[0], ExpressionType::COMPARE_GREATERTHANOREQUALTO, Value(std::move(min_prefix)));
@@ -1057,13 +1057,14 @@ FilterPushdownResult FilterCombiner::TryPushdownTemporalCastFilter(TableFilterSe
 	return FilterPushdownResult::PUSHED_DOWN_PARTIALLY;
 }
 
-FilterPushdownResult FilterCombiner::TryPushdownExpression(TableFilterSet &table_filters,
-                                                           const vector<ColumnIndex> &column_ids, Expression &expr) {
+FilterPushdownResult FilterCombiner::TryPushdownExpression(LogicalGet &get, TableFilterSet &table_filters,
+                                                           Expression &expr) {
+	auto &column_ids = get.GetColumnIds();
 	auto pushdown_result = TryPushdownPrefixFilter(table_filters, column_ids, expr);
 	if (pushdown_result != FilterPushdownResult::NO_PUSHDOWN) {
 		return pushdown_result;
 	}
-	pushdown_result = TryPushdownLikeFilter(table_filters, column_ids, expr);
+	pushdown_result = TryPushdownLikeFilter(get, table_filters, expr);
 	if (pushdown_result != FilterPushdownResult::NO_PUSHDOWN) {
 		return pushdown_result;
 	}
@@ -1097,8 +1098,9 @@ void FilterCombiner::TryPushdownRelaxedFilter(TableFilterSet &table_filters, con
 	}
 }
 
-TableFilterSet FilterCombiner::GenerateTableScanFilters(const vector<ColumnIndex> &column_ids,
+TableFilterSet FilterCombiner::GenerateTableScanFilters(LogicalGet &get,
                                                         vector<FilterPushdownResult> &pushdown_results) {
+	auto &column_ids = get.GetColumnIds();
 	TableFilterSet table_filters;
 	//! First, we figure the filters that have constant expressions that we can push down to the table scan
 	for (auto &constant_value : constant_values) {
@@ -1112,7 +1114,7 @@ TableFilterSet FilterCombiner::GenerateTableScanFilters(const vector<ColumnIndex
 	//! Here we look for LIKE or IN filters
 	for (idx_t rem_fil_idx = 0; rem_fil_idx < remaining_filters.size(); rem_fil_idx++) {
 		auto &remaining_filter = remaining_filters[rem_fil_idx];
-		auto pushdown_result = TryPushdownExpression(table_filters, column_ids, *remaining_filter);
+		auto pushdown_result = TryPushdownExpression(get, table_filters, *remaining_filter);
 		if (pushdown_result == FilterPushdownResult::PUSHED_DOWN_FULLY) {
 			// the filter has been pushed down entirely - we can prune it
 			remaining_filters.erase_at(rem_fil_idx--);

@@ -46,13 +46,15 @@ virtual_column_map_t MultiColumnScanVirtualColumns(ClientContext &, optional_ptr
 }
 
 //! The test scan, offered multi-column filters when multi_column_filter_pushdown is set
-TableFunction MultiColumnScan(const char *name, bool multi_column_filter_pushdown) {
+TableFunction MultiColumnScan(const char *name, bool multi_column_filter_pushdown,
+                              bool partial_like_filter_pushdown = false) {
 	TableFunction function(name, {}, MultiColumnScanFunction, MultiColumnScanBind);
 	function.projection_pushdown = true;
 	function.filter_pushdown = true;
 	function.pushdown_expression = MultiColumnScanPushdownExpression;
 	function.get_virtual_columns = MultiColumnScanVirtualColumns;
 	function.multi_column_filter_pushdown = multi_column_filter_pushdown;
+	function.partial_like_filter_pushdown = partial_like_filter_pushdown;
 	return function;
 }
 
@@ -64,11 +66,12 @@ void SameWithinQuery(DataChunk &args, ExpressionState &, Vector &result) {
 
 //! An in-memory database with the test scans and the same_within_query function registered
 struct ScanFixture {
-	//! Registers offering_scan (flag set), plain_scan (flag not set) and same_within_query
+	//! Registers scans opting into multi-column or partial LIKE pushdown, and a plain scan
 	ScanFixture() : db(nullptr), con(db) {
 		ExtensionLoader loader(*db.instance, "multi_column_filter_pushdown_test");
 		loader.RegisterFunction(MultiColumnScan("offering_scan", true));
 		loader.RegisterFunction(MultiColumnScan("plain_scan", false));
+		loader.RegisterFunction(MultiColumnScan("like_scan", false, true));
 		ScalarFunction same_within_query("same_within_query", {LogicalType::INTEGER, LogicalType::INTEGER},
 		                                 LogicalType::BOOLEAN, SameWithinQuery);
 		same_within_query.SetStability(FunctionStability::CONSISTENT_WITHIN_QUERY);
@@ -288,11 +291,14 @@ TEST_CASE("A leading-wildcard LIKE is offered to a scan as a partial filter", "[
 
 	// c is the third declared scan column. Selecting a leaves earlier columns in the projection and verifies that
 	// the pushed expression is rebound to the filtered column rather than retaining its query-plan binding.
-	auto scan = PlanScan(fixture.con, "SELECT a FROM offering_scan() WHERE c LIKE '%nee_le%'");
+	auto scan = PlanScan(fixture.con, "SELECT a FROM like_scan() WHERE c LIKE '%nee_le%'");
 	REQUIRE(!scan.filter->expressions.empty());
 	auto &pushed = PushedFilter(scan, 2);
 	REQUIRE(ContainsFunction(*pushed.expr, "~~"));
 	RequireLocallyBound(*pushed.expr);
+
+	auto plain_plan = fixture.con.ExtractPlan("SELECT a FROM plain_scan() WHERE c LIKE '%nee_le%'");
+	REQUIRE_FALSE(FindFilterOnGet(*plain_plan));
 
 	fixture.con.Rollback();
 }
@@ -302,14 +308,14 @@ TEST_CASE("A wildcard-free ILIKE is offered as case-insensitive equality", "[api
 	fixture.con.BeginTransaction();
 
 	SECTION("ASCII also keeps DuckDB's ordered prefix bounds") {
-		auto scan = PlanScan(fixture.con, "SELECT a FROM offering_scan() WHERE c ILIKE 'Needle'");
+		auto scan = PlanScan(fixture.con, "SELECT a FROM like_scan() WHERE c ILIKE 'Needle'");
 		REQUIRE(!scan.filter->expressions.empty());
 		auto &pushed = PushedFilter(scan, 2);
 		REQUIRE(ContainsFunction(*pushed.expr, "~~*"));
 		RequireLocallyBound(*pushed.expr);
 	}
 	SECTION("non-ASCII remains available when ordered prefix bounds cannot be derived") {
-		auto scan = PlanScan(fixture.con, "SELECT a FROM offering_scan() WHERE c ILIKE 'École'");
+		auto scan = PlanScan(fixture.con, "SELECT a FROM like_scan() WHERE c ILIKE 'École'");
 		REQUIRE(!scan.filter->expressions.empty());
 		auto &pushed = PushedFilter(scan, 2);
 		REQUIRE(ContainsFunction(*pushed.expr, "~~*"));

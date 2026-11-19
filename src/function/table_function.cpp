@@ -121,6 +121,7 @@ BoundTableFunction::BoundTableFunction(shared_ptr<const TableFunction> function_
 	sampling_pushdown = function.sampling_pushdown;
 	late_materialization = function.late_materialization;
 	multi_column_filter_pushdown = function.multi_column_filter_pushdown;
+	partial_like_filter_pushdown = function.partial_like_filter_pushdown;
 	function_info = function.function_info;
 	BaseTableFunction::return_type = function.return_type;
 	call_return_type = function.call_return_type;
@@ -183,7 +184,8 @@ bool BaseTableFunction::operator==(const BaseTableFunction &rhs) const {
 	       projection_pushdown == rhs.projection_pushdown && filter_pushdown == rhs.filter_pushdown &&
 	       filter_prune == rhs.filter_prune && sampling_pushdown == rhs.sampling_pushdown &&
 	       late_materialization == rhs.late_materialization &&
-	       multi_column_filter_pushdown == rhs.multi_column_filter_pushdown && return_type == rhs.return_type &&
+	       multi_column_filter_pushdown == rhs.multi_column_filter_pushdown &&
+	       partial_like_filter_pushdown == rhs.partial_like_filter_pushdown && return_type == rhs.return_type &&
 	       global_initialization == rhs.global_initialization;
 }
 
