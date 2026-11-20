@@ -281,8 +281,14 @@ def linux_musl_matrix(selection_input: JobSelectionInput) -> list[dict[str, obje
     return result
 
 
+# detect-runners hands forks macos-14, which GitHub retired on 2026-11-02.
+RETIRED_GITHUB_RUNNERS = {"macos-14": "macos-26"}
+
+
 def configure_runners(selection_input: JobSelectionInput) -> dict[str, str]:
-    if selection_input.event_name != "merge_group" or selection_input.runner_provider != "namespace":
+    if selection_input.runner_provider != "namespace":
+        return {name: RETIRED_GITHUB_RUNNERS.get(runner, runner) for name, runner in selection_input.runners.items()}
+    if selection_input.event_name != "merge_group":
         return selection_input.runners.copy()
     return {name: f"{runner};job.priority=2" for name, runner in selection_input.runners.items()}
 

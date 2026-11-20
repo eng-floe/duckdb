@@ -358,6 +358,22 @@ class JobStagesTest(unittest.TestCase):
         )
         self.assertEqual(github_selection.runners["linux_x64"], "runner-x64")
 
+    def test_github_runners_replace_retired_macos(self):
+        selection_input = job_stages.JobSelectionInput(
+            event_name="pull_request",
+            ref_name="feature/my-branch",
+            default_branch="main",
+            repository="somefork/duckdb",
+            skip_tests=False,
+            changed_keys=set(),
+            reduced_ci_mode="enabled",
+            runners={"linux_x64": "runner-x64", "macos_14_arm64": "macos-14"},
+            runner_provider="github",
+        )
+        runners = job_stages.configure_runners(selection_input)
+        self.assertEqual(runners["macos_14_arm64"], "macos-26")
+        self.assertEqual(runners["linux_x64"], "runner-x64")
+
     def test_writes_github_output(self):
         selection = job_stages.JobSelection(
             enabled_jobs=["linux-relassert"], save_cache=False, reduced_ci_mode="enabled"
