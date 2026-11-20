@@ -16,6 +16,7 @@
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/scalar/tablefilter_functions.hpp"
 #include "duckdb/function/scalar_function.hpp"
+#include "duckdb/planner/filter/floe_prefix_range_export.hpp"
 #include "duckdb/planner/table_filter_state.hpp"
 
 namespace duckdb {
@@ -195,6 +196,12 @@ public:
 	                         idx_t count) const = 0;
 	virtual FilterPropagateResult LookupRange(const Value &lower_bound, const Value &upper_bound) const = 0;
 	virtual bool IsInitialized() const = 0;
+	//! Floe: sets out to the filter as a scan outside DuckDB reads it; false when not initialized or not exported
+	virtual bool FloeTryExport(FloePrefixRangeExport &out) const {
+		return false;
+	}
+	//! Floe: the bounds FloeTryExport reports
+	FloePrefixRangeBounds floe_bounds;
 	static bool SupportedType(const LogicalType &type);
 	static unique_ptr<PrefixRangeFilter> CreatePrefixRangeFilter(const LogicalType &key_type);
 	static bool TryComputeSpan(const Value &lower_bound, const Value &upper_bound, uhugeint_t &result);

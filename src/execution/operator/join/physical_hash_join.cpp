@@ -1547,6 +1547,7 @@ bool JoinFilterPushdownInfo::TryRegisterPrefixRangeFilter(const JoinFilterPushdo
 	if (!ht.GetPrefixRangeFilter()) {
 		const auto key_type = ht.conditions[0].GetLHS().GetReturnType();
 		auto prefix_filter = PrefixRangeFilter::CreatePrefixRangeFilter(key_type);
+		prefix_filter->floe_bounds = {min_val, max_val};
 		prefix_filter->Initialize(context, ht.Count(), min_val, max_val, max_bits);
 		ht.SetPrefixRangeFilter(std::move(prefix_filter));
 		ht.SetBuildPrefixRangeFilter();
