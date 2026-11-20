@@ -1,0 +1,72 @@
+# name: test/sql/join/inner/test_prefix_range_filter_recursive_cte.test
+# description: A prefix range filter pushed into a scan stays valid when a recursive CTE reruns the join build
+# group: [inner]
+
+statement ok
+SET disabled_optimizers = 'join_order,build_side_probe_side,compressed_materialization';
+
+statement ok
+CREATE OR REPLACE TABLE edges AS
+SELECT i::BIGINT AS src, (i + 1)::BIGINT AS dst
+FROM range(0, 100000) t(i);
+
+statement ok
+CREATE OR REPLACE TABLE seeds AS
+SELECT (i * 100)::BIGINT AS k
+FROM range(0, 500) t(i);
+
+# The recursive term probes the edges scan and builds on the working table, so every iteration
+# reruns the build and pushes a fresh prefix range filter into the same scan.
+query II
+EXPLAIN ANALYZE
+WITH RECURSIVE walk(k, depth) AS (
+	SELECT k, 0 FROM seeds
+	UNION ALL
+	SELECT e.dst, w.depth + 1
+	FROM edges e
+	JOIN walk w
+	  ON e.src = w.k
+	WHERE w.depth < 20
+)
+SELECT count(*), min(k), max(k), sum(k)
+FROM walk;
+----
+analyzed_plan	<REGEX>:(?s).*IN.*PRF.*\(k\).*
+
+loop i 0 3
+
+query IIII
+WITH RECURSIVE walk(k, depth) AS (
+	SELECT k, 0 FROM seeds
+	UNION ALL
+	SELECT e.dst, w.depth + 1
+	FROM edges e
+	JOIN walk w
+	  ON e.src = w.k
+	WHERE w.depth < 20
+)
+SELECT count(*), min(k), max(k), sum(k)
+FROM walk;
+----
+10500	0	49920	262080000
+
+endloop
+
+# The same walk with a distinct recursive term and a single thread.
+statement ok
+SET threads = 1;
+
+query IIII
+WITH RECURSIVE walk(k) AS (
+	SELECT k FROM seeds
+	UNION
+	SELECT e.dst
+	FROM edges e
+	JOIN walk w
+	  ON e.src = w.k
+	WHERE e.dst % 100 < 30
+)
+SELECT count(*), min(k), max(k), sum(k)
+FROM walk;
+----
+15000	0	49929	374467500

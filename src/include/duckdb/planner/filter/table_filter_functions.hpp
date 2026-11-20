@@ -16,6 +16,7 @@
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/scalar/tablefilter_functions.hpp"
 #include "duckdb/function/scalar_function.hpp"
+#include "duckdb/planner/filter/floe_prefix_range_export.hpp"
 #include "duckdb/planner/table_filter_state.hpp"
 
 namespace duckdb {
@@ -163,6 +164,8 @@ struct BloomFilterFunctionData : public FunctionData {
 };
 
 //! Runtime prefix-range filter state used by join pushdown and internal tablefilter functions.
+//! The bitmap is allocated by the buffer manager of the database the filter was initialized in, so the last
+//! reference to an initialized filter must be dropped while that database is alive.
 class PrefixRangeFilter {
 public:
 	struct BuildState {
@@ -193,6 +196,12 @@ public:
 	                         idx_t count) const = 0;
 	virtual FilterPropagateResult LookupRange(const Value &lower_bound, const Value &upper_bound) const = 0;
 	virtual bool IsInitialized() const = 0;
+	//! Floe: sets out to the filter as a scan outside DuckDB reads it; false when not initialized or not exported
+	virtual bool FloeTryExport(FloePrefixRangeExport &out) const {
+		return false;
+	}
+	//! Floe: the bounds FloeTryExport reports
+	FloePrefixRangeBounds floe_bounds;
 	static bool SupportedType(const LogicalType &type);
 	static unique_ptr<PrefixRangeFilter> CreatePrefixRangeFilter(const LogicalType &key_type);
 	static bool TryComputeSpan(const Value &lower_bound, const Value &upper_bound, uhugeint_t &result);
@@ -200,11 +209,12 @@ public:
 
 //! FunctionData for prefix range internal function
 struct PrefixRangeFunctionData : public FunctionData {
-	PrefixRangeFunctionData(optional_ptr<PrefixRangeFilter> filter_p, bool filters_null_values_p,
+	PrefixRangeFunctionData(shared_ptr<const PrefixRangeFilter> filter_p, bool filters_null_values_p,
 	                        const string &key_column_name_p, const LogicalType &key_type_p,
 	                        float selectivity_threshold_p, idx_t n_vectors_to_check_p);
 
-	optional_ptr<PrefixRangeFilter> filter;
+	//! The published filter, shared with the join that built it; null when the function carries no filter.
+	shared_ptr<const PrefixRangeFilter> filter;
 	bool filters_null_values;
 	string key_column_name;
 	LogicalType key_type;
