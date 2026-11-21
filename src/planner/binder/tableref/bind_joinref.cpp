@@ -250,8 +250,10 @@ BoundStatement Binder::Bind(JoinRef &ref) {
 	switch (ref.ref_type) {
 	case JoinRefType::NATURAL: {
 		if (IsExtractingNames()) {
-			// the columns are unknown: join on none
+			// the columns are unknown: join on none, reading every column of both sides
 			result->ref_type = JoinRefType::CROSS;
+			ExtractAllColumns(left_binder.bind_context);
+			ExtractAllColumns(right_binder.bind_context);
 			break;
 		}
 		// natural join, figure out which column names are present in both sides of the join
@@ -311,8 +313,13 @@ BoundStatement Binder::Bind(JoinRef &ref) {
 	case JoinRefType::REGULAR:
 	case JoinRefType::ASOF:
 		if (!ref.using_columns.empty() && IsExtractingNames()) {
-			// the columns are unknown: join on none
+			// the columns are unknown: join on none, reading the USING columns of both sides
 			result->ref_type = JoinRefType::CROSS;
+			for (auto &using_column : ref.using_columns) {
+				const ColumnRefExpression column(using_column);
+				left_binder.ExtractColumn(column);
+				right_binder.ExtractColumn(column);
+			}
 		} else if (!ref.using_columns.empty()) {
 			// USING columns
 			D_ASSERT(!result->condition);

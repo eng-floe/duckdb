@@ -196,6 +196,7 @@ BoundStatement Binder::Bind(BaseTableRef &ref) {
 
 			// add a bind context entry
 			auto table_index = GenerateTableIndex();
+			AddExtractedTable(table_index, ref);
 			auto ref_alias = ref.alias.empty() ? ref.Table() : ref.alias;
 			vector<LogicalType> types {LogicalType::INTEGER};
 			vector<Identifier> names {Identifier("__dummy_col" + to_string(table_index.index))};

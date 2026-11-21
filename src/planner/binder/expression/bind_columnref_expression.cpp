@@ -82,6 +82,7 @@ unique_ptr<ParsedExpression> ExpressionBinder::QualifyColumnName(ColumnRefExpres
 BindResult ExpressionBinder::BindExpression(ColumnRefExpression &col_ref_p, idx_t depth, bool root_expression,
                                             unique_ptr<ParsedExpression> &expr_ptr) {
 	if (binder.IsExtractingNames()) {
+		binder.ExtractColumn(col_ref_p);
 		return BindResult(make_uniq<BoundConstantExpression>(Value(LogicalType::SQLNULL)));
 	}
 

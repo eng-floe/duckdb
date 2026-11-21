@@ -27,6 +27,7 @@
 #include "duckdb/planner/bound_statement.hpp"
 #include "duckdb/planner/bound_tokens.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/floe/extracted_columns.hpp"
 #include "duckdb/parser/expression/star_expression.hpp"
 #include "duckdb/planner/joinside.hpp"
 #include "duckdb/planner/bound_constraint.hpp"
@@ -192,6 +193,8 @@ struct GlobalBinderState {
 	BindingMode mode = BindingMode::STANDARD_BINDING;
 	//! Table names extracted for BindingMode::EXTRACT_NAMES or BindingMode::EXTRACT_QUALIFIED_NAMES.
 	unordered_set<string> table_names;
+	//! The columns read of each table named, by the table's dummy binding, while extracting names
+	unordered_map<TableIndex, ExtractedColumns> extracted_columns;
 	//! Replacement Scans extracted for BindingMode::EXTRACT_REPLACEMENT_SCANS
 	identifier_map_t<unique_ptr<TableRef>> replacement_scans;
 	//! Using column sets
@@ -391,6 +394,14 @@ public:
 	//! Whether the binder only extracts table names: a table binds as one dummy column, so column checks cannot hold
 	bool IsExtractingNames();
 	void AddTableName(string table_name);
+	//! While extracting names: notes that the dummy binding `index` stands for the table `ref` names
+	void AddExtractedTable(TableIndex index, const BaseTableRef &ref);
+	//! While extracting names: notes the columns of the tables in scope `column` may read
+	void ExtractColumn(const ColumnRefExpression &column);
+	//! While extracting names: notes that every column is read of the tables `context` binds
+	void ExtractAllColumns(BindContext &context);
+	//! The columns read of each table extracted
+	vector<ExtractedColumns> GetExtractedColumns();
 	void AddReplacementScan(const Identifier &table_name, unique_ptr<TableRef> replacement);
 	const unordered_set<string> &GetTableNames();
 	identifier_map_t<unique_ptr<TableRef>> &GetReplacementScans();

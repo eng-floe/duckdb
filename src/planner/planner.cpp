@@ -197,15 +197,21 @@ static void RunPostBindExtensions(ClientContext &context, Binder &binder, BoundS
 	}
 }
 
-static void VerifyTableNames(ClientContext &context, SQLStatement &statement, BoundParameterMap &parameters) {
+static void VerifyTableNames(ClientContext &context, SQLStatement &statement, BoundParameterMap &parameters,
+                             LogicalOperator &plan) {
 	auto names_only_binder = Binder::CreateBinder(context);
 	names_only_binder->SetBindingMode(BindingMode::EXTRACT_NAMES);
 	names_only_binder->SetParameters(parameters);
 	try {
 		names_only_binder->Bind(statement);
 	} catch (std::exception &ex) {
+		ErrorData error(ex);
+		if (IsKnownNamesOnlyFailure(error)) {
+			return;
+		}
 		throw InternalException("Names-only binding failed for query \"%s\": %s", statement.query, ex.what());
 	}
+	VerifyExtractedColumns(names_only_binder->GetExtractedColumns(), plan);
 }
 
 void Planner::CreatePlan(SQLStatement &statement) {
@@ -229,7 +235,7 @@ void Planner::CreatePlan(SQLStatement &statement) {
 		binding_timer.EndTimer();
 		if (names_only_statement && statement.type == StatementType::SELECT_STATEMENT) {
 			BoundParameterMap names_only_parameters(parameter_data);
-			VerifyTableNames(context, *names_only_statement, names_only_parameters);
+			VerifyTableNames(context, *names_only_statement, names_only_parameters, *bound_statement.plan);
 		}
 
 		RunPostBindExtensions(context, *binder, bound_statement);

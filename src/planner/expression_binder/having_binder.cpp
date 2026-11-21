@@ -23,6 +23,10 @@ BindResult HavingBinder::BindLambdaReference(LambdaRefExpression &expr, idx_t de
 }
 
 BindResult HavingBinder::BindColumnRef(unique_ptr<ParsedExpression> &expr_ptr, idx_t depth, bool root_expression) {
+	if (binder.IsExtractingNames()) {
+		auto &col_ref = expr_ptr->Cast<ColumnRefExpression>();
+		return ExpressionBinder::BindExpression(col_ref, depth, root_expression, expr_ptr);
+	}
 	// Keep the original column name to return a meaningful error message.
 	auto col_ref = expr_ptr->Cast<ColumnRefExpression>();
 	const auto &column_name = col_ref.GetColumnName();

@@ -1099,6 +1099,10 @@ BoundStatement Binder::Bind(PivotRef &ref) {
 	// figure out the set of column names that are in the source of the pivot
 	vector<unique_ptr<ParsedExpression>> all_columns;
 	star_binder->ExpandStarExpression(make_uniq<StarExpression>(), all_columns);
+	if (IsExtractingNames()) {
+		// a pivot reads the columns it does not name too
+		ExtractAllColumns(star_binder->bind_context);
+	}
 
 	unique_ptr<SelectNode> select_node;
 	unique_ptr<ParsedExpression> where_clause;

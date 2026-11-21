@@ -489,6 +489,10 @@ unique_ptr<ParsedExpression> ColumnQualifier::QualifyColumnNameWithManyDots(Colu
 }
 
 unique_ptr<ParsedExpression> ColumnQualifier::QualifyColumnName(ColumnRefExpression &colref, ErrorData &error) {
+	// a name may be a column or a select-list alias
+	if (binder.IsExtractingNames()) {
+		binder.ExtractColumn(colref);
+	}
 	auto qualified_colref = QualifyColumnNameInternal(colref, error);
 	if (!qualified_colref) {
 		if (alias_binder) {

@@ -14,6 +14,7 @@ set(TEST_API_OBJECTS
     test_profile_plan_lifetime.cpp
     test_multi_file_column_mapper.cpp
     test_multi_column_filter_pushdown.cpp
+    test_extracted_columns.cpp
     test_process_util.cpp
     test_random_after_clone.cpp
     test_remove_directory_extended.cpp

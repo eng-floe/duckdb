@@ -469,6 +469,10 @@ BindResult BindContext::BindColumn(ColumnRefExpression &colref, idx_t depth) {
 }
 
 string BindContext::BindColumn(PositionalReferenceExpression &ref, Identifier &table_name, Identifier &column_name) {
+	// a position counts the columns of every table in scope
+	if (binder.IsExtractingNames()) {
+		binder.ExtractAllColumns(*this);
+	}
 	idx_t total_columns = 0;
 	idx_t current_position = ref.Index() - 1;
 	for (auto &entry : bindings_list) {
@@ -558,6 +562,7 @@ string CandidateColumnMessage(const vector<Identifier> &candidate_columns, const
 
 void BindContext::GenerateAllColumnExpressions(StarExpression &expr,
                                                vector<unique_ptr<ParsedExpression>> &new_select_list) {
+	const auto first = new_select_list.size();
 	if (bindings_list.empty() && expr.RelationName().empty()) {
 		throw BinderException("* expression without FROM clause!");
 	}
@@ -642,8 +647,9 @@ void BindContext::GenerateAllColumnExpressions(StarExpression &expr,
 					throw BinderException("* expression without FROM clause!");
 				}
 				if (binder.IsExtractingNames()) {
-					// a struct column of a table whose columns are unknown
-					new_select_list.push_back(ConstantExpression::Null());
+					// a struct column of an unknown table: it reads the column
+					new_select_list.push_back(make_uniq<ColumnRefExpression>(expr.RelationName()));
+					KeepReplacements(expr, new_select_list, first);
 					return;
 				}
 				error.Throw();
@@ -660,6 +666,7 @@ void BindContext::GenerateAllColumnExpressions(StarExpression &expr,
 			if (col_type.id() != LogicalTypeId::STRUCT && binder.IsExtractingNames()) {
 				// its type is unknown
 				new_select_list.push_back(ConstantExpression::Null());
+				KeepReplacements(expr, new_select_list, first);
 				return;
 			}
 			if (col_type.id() != LogicalTypeId::STRUCT) {
@@ -701,6 +708,7 @@ void BindContext::GenerateAllColumnExpressions(StarExpression &expr,
 	if (binder.IsExtractingNames()) {
 		//! We only care about extracting the names of the referenced columns
 		//! remove the exclude + replace lists
+		KeepReplacements(expr, new_select_list, first);
 		expr.ExcludeListMutable().clear();
 		expr.ReplaceListMutable().clear();
 	}
