@@ -1,6 +1,15 @@
 {
-  "description": "Run with SET debug_verify_table_names=true to test names-only set-operation binding",
+  "description": "Run with SET debug_verify_table_names=true to check that names-only binding finds every column a query reads",
   "on_init": "SET debug_verify_table_names=true",
   "skip_compiled": "true",
-  "inherit_skip_tests": "test/configs/stats_dependent_tests.json"
+  "inherit_skip_tests": "test/configs/stats_dependent_tests.json",
+  "skip_tests": [
+    {
+      "reason": "Binding twice doubles what binding logs and reads: the names-only binding's own warning, and its own Parquet reads",
+      "paths": [
+        "test/sql/copy/parquet/parquet_prefetch_overlapping_ranges.test",
+        "test/sql/types/decimal/decimal_values_warning.test"
+      ]
+    }
+  ]
 }
