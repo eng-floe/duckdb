@@ -30,29 +30,20 @@ bool CanPushdownFilter(vector<column_binding_set_t> window_exprs_partition_bindi
 	return filter_on_all_partitions;
 }
 
-// same as the one in topn_window_elimination.cpp, which no header declares
-static bool BindingsReferenceRowNumber(const vector<ColumnBinding> &bindings, const LogicalWindow &window) {
-	for (const auto &binding : bindings) {
-		if (binding.table_index == window.window_index) {
-			return true;
-		}
-	}
-	return false;
-}
-
 unique_ptr<LogicalOperator> FilterPushdown::PushdownWindow(unique_ptr<LogicalOperator> op) {
 	D_ASSERT(op->type == LogicalOperatorType::LOGICAL_WINDOW);
 	auto &window = op->Cast<LogicalWindow>();
 	FilterPushdown pushdown(optimizer, convert_mark_joins, projection_mode);
 
 	if (window.is_delim_row_number) {
-		// nothing reads the numbers this window gives, so filtering first only leaves fewer rows to number
-		// a filter that reads them is the exception and stays above
+		// Split the filters: those that do not read the row numbers go under the window, the rest stay above.
+		// Nothing reads these numbers except the duplicate elimination pairing the two sides of the join, and
+		// both sides are fed from the same place, so they stay in step wherever the filter runs. A volatile
+		// filter stays above regardless, as it does for the partitioned window further down.
 		vector<unique_ptr<Filter>> leftover_filters;
 		for (idx_t i = 0; i < filters.size(); i++) {
-			vector<ColumnBinding> bindings;
-			ExtractFilterBindings(*filters.at(i)->filter, bindings);
-			if (BindingsReferenceRowNumber(bindings, window) || filters.at(i)->filter->IsVolatile()) {
+			auto &f = *filters.at(i);
+			if (f.bindings.find(window.window_index) != f.bindings.end() || f.filter->IsVolatile()) {
 				leftover_filters.push_back(std::move(filters.at(i)));
 			} else {
 				pushdown.filters.push_back(std::move(filters.at(i)));
