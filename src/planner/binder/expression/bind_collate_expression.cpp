@@ -1,6 +1,7 @@
 #include "duckdb/parser/expression/collate_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_parameter_expression.hpp"
+#include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression_binder.hpp"
 
 namespace duckdb {
