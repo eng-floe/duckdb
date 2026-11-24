@@ -3,6 +3,7 @@
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_unnest_expression.hpp"
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
+#include "duckdb/planner/binder.hpp"
 #include "duckdb/execution/operator/projection/physical_unnest.hpp"
 
 namespace duckdb {

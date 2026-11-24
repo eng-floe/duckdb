@@ -12,6 +12,7 @@ add_subdirectory(cpp)
 set(TEST_API_OBJECTS
     test_api.cpp
     test_profile_plan_lifetime.cpp
+    test_secure_view_profile.cpp
     test_multi_file_column_mapper.cpp
     test_multi_column_filter_pushdown.cpp
     test_process_util.cpp

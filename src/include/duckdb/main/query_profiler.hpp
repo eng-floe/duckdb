@@ -254,6 +254,8 @@ private:
 
 	//! A map of a Physical Operator pointer to a tree node
 	TreeMap tree_map;
+	//! The operators dropped from the tree map by collapsing a secure view
+	reference_set_t<const PhysicalOperator> collapsed_operators;
 	//! Whether the plan the tree map refers to is still alive
 	bool plan_alive = false;
 	//! What EndPlan reads the last profile of the plan with, if anything
