@@ -1511,6 +1511,15 @@ void RemoveUnusedColumns::RemoveColumnsFromLogicalGet(LogicalGet &get, unique_pt
 		// in scan order
 		if (op_ref->type == LogicalOperatorType::LOGICAL_FILTER) {
 			get.projection_ids.clear();
+			// Its predicates were the scan's filters, which the scan's rows count already. It takes their
+			// selectivity when none went back to the scan, which physical planning estimates again.
+			if (get.has_estimated_cardinality) {
+				op_ref->SetEstimatedCardinality(get.estimated_cardinality);
+			}
+			if (!get.table_filters.HasFilters()) {
+				op_ref->estimated_selectivity = get.estimated_selectivity;
+			}
+			get.estimated_selectivity = nullopt;
 		}
 		return;
 	}

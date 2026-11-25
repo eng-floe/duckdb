@@ -345,6 +345,23 @@ TEST_CASE("A filter operator built after join ordering gets a selectivity at phy
 	con.Rollback();
 }
 
+TEST_CASE("A filter rebuilt after join ordering gets DuckDB's default share of its child's rows",
+          "[optimizer][estimation]") {
+	DuckDB db(nullptr);
+	Connection con(db);
+	CreateTables(con);
+
+	// Statistics propagation filters `big.k` to `small`'s range, and filter pushdown then rebuilds the filter above
+	// `big`.
+	auto logical = con.ExtractPlan("SELECT * FROM big JOIN small ON big.k = small.k WHERE random() < big.v");
+	auto filter = FindLogicalFilter(*logical);
+	REQUIRE(filter);
+	REQUIRE(filter->children[0]->type == LogicalOperatorType::LOGICAL_GET);
+	REQUIRE(filter->children[0]->Cast<LogicalGet>().table_filters.HasFilters());
+	auto child_rows = static_cast<double>(filter->children[0]->estimated_cardinality);
+	REQUIRE(filter->estimated_cardinality == idx_t(child_rows * RelationStatisticsHelper::DEFAULT_SELECTIVITY));
+}
+
 TEST_CASE("A filter join ordering applies across relations has DuckDB's default selectivity",
           "[optimizer][estimation]") {
 	DuckDB db(nullptr);

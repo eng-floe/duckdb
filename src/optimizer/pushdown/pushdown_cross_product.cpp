@@ -135,13 +135,7 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownCrossProduct(unique_ptr<Logi
 	if (deferred_filters.empty()) {
 		return result;
 	}
-	auto filter = make_uniq<LogicalFilter>();
-	filter->expressions = std::move(deferred_filters);
-	filter->children.push_back(std::move(result));
-	if (filter->children[0]->has_estimated_cardinality) {
-		filter->SetEstimatedCardinality(filter->children[0]->estimated_cardinality);
-	}
-	return std::move(filter);
+	return AddLogicalFilter(std::move(result), std::move(deferred_filters));
 }
 
 } // namespace duckdb
