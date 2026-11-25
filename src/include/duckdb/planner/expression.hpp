@@ -9,7 +9,9 @@
 #pragma once
 
 #include "duckdb/parser/base_expression.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/types.hpp"
+#include "duckdb/floe/floe_estimated_selectivity.hpp"
 
 namespace duckdb {
 class BaseStatistics;
@@ -30,6 +32,9 @@ protected:
 	unique_ptr<BaseStatistics> verification_stats;
 
 public:
+	//! The selectivity estimated for this predicate; none until it is estimated
+	optional<EstimatedSelectivity> estimated_selectivity;
+
 	const LogicalType &GetReturnType() const {
 		return return_type;
 	}
@@ -89,6 +94,7 @@ protected:
 		alias = other.alias;
 		SetReturnType(other.return_type);
 		query_location = other.query_location;
+		estimated_selectivity = other.estimated_selectivity;
 	}
 };
 

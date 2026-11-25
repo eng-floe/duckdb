@@ -135,6 +135,7 @@
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/execution/physical_table_scan_enum.hpp"
 #include "duckdb/execution/reservoir_sample.hpp"
+#include "duckdb/floe/floe_estimated_selectivity.hpp"
 #include "duckdb/function/aggregate_function.hpp"
 #include "duckdb/function/aggregate_state.hpp"
 #include "duckdb/function/aggregate_state_serialization.hpp"
@@ -5781,6 +5782,24 @@ const char* EnumUtil::ToChars<SelectivityOptionalFilterType>(SelectivityOptional
 template<>
 SelectivityOptionalFilterType EnumUtil::FromString<SelectivityOptionalFilterType>(const char *value) {
 	return static_cast<SelectivityOptionalFilterType>(StringUtil::StringToEnum(GetSelectivityOptionalFilterTypeValues(), 3, "SelectivityOptionalFilterType", value));
+}
+
+const StringUtil::EnumStringLiteral *GetSelectivitySourceValues() {
+	static constexpr StringUtil::EnumStringLiteral values[] {
+		{ static_cast<uint32_t>(SelectivitySource::STATISTICS), "STATISTICS" },
+		{ static_cast<uint32_t>(SelectivitySource::DEFAULT), "DEFAULT" }
+	};
+	return values;
+}
+
+template<>
+const char* EnumUtil::ToChars<SelectivitySource>(SelectivitySource value) {
+	return StringUtil::EnumToString(GetSelectivitySourceValues(), 2, "SelectivitySource", static_cast<uint32_t>(value));
+}
+
+template<>
+SelectivitySource EnumUtil::FromString<SelectivitySource>(const char *value) {
+	return static_cast<SelectivitySource>(StringUtil::StringToEnum(GetSelectivitySourceValues(), 2, "SelectivitySource", value));
 }
 
 const StringUtil::EnumStringLiteral *GetSequenceInfoValues() {

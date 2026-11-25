@@ -11,6 +11,7 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/tree_renderer.hpp"
 #include "duckdb/main/config.hpp"
+#include "duckdb/floe/floe_selectivity.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/operator/list.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
@@ -298,6 +299,7 @@ unique_ptr<LogicalOperator> LogicalOperator::Copy(ClientContext &context) const 
 	stream.Rewind();
 	bound_parameter_map_t parameters;
 	auto op_copy = BinaryDeserializer::Deserialize<LogicalOperator>(stream, context, parameters);
+	floe_estimation::CopyPredicateSelectivities(*this, *op_copy);
 	return op_copy;
 }
 

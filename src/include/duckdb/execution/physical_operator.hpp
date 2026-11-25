@@ -15,12 +15,14 @@
 #include "duckdb/common/enums/operator_result_type.hpp"
 #include "duckdb/common/enums/order_preservation_type.hpp"
 #include "duckdb/common/enums/physical_operator_type.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/optional_idx.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/execution/partition_info.hpp"
 #include "duckdb/execution/physical_operator_states.hpp"
 #include "duckdb/execution/progress_data.hpp"
+#include "duckdb/floe/floe_estimated_selectivity.hpp"
 
 namespace duckdb {
 
@@ -62,6 +64,8 @@ public:
 	vector<LogicalType> types;
 	//! The estimated cardinality.
 	idx_t estimated_cardinality;
+	//! The estimated selectivity of the logical operator it was planned for
+	optional<EstimatedSelectivity> estimated_selectivity;
 
 	//! The global sink state. Published under `lock` by Pipeline::ResetSink on a worker;
 	//! a reader racing pipeline initialization must hold `lock` to observe it safely
