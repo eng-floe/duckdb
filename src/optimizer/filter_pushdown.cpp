@@ -236,6 +236,13 @@ void FilterPushdown::GenerateFilters() {
 	});
 }
 
+void FilterPushdown::TakeChildCardinality(LogicalOperator &op) {
+	auto &child = *op.children[0];
+	if (child.has_estimated_cardinality) {
+		op.SetEstimatedCardinality(child.estimated_cardinality);
+	}
+}
+
 unique_ptr<LogicalOperator> FilterPushdown::AddLogicalFilter(unique_ptr<LogicalOperator> op,
                                                              vector<unique_ptr<Expression>> expressions) {
 	if (expressions.empty()) {

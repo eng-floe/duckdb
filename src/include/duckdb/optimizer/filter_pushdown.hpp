@@ -59,6 +59,8 @@ private:
 	ProjectionMode projection_mode;
 
 	vector<unique_ptr<Filter>> filters;
+	//! Gives `op`, which outputs every row of its child, its child's rows, which the filters pushed below it may cut
+	static void TakeChildCardinality(LogicalOperator &op);
 	//! Push down a LogicalAggregate op
 	unique_ptr<LogicalOperator> PushdownAggregate(unique_ptr<LogicalOperator> op);
 	//! Push down a distinct operator
