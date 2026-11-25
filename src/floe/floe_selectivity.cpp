@@ -1,6 +1,7 @@
 #include "duckdb/floe/floe_selectivity.hpp"
 
 #include "duckdb/execution/physical_operator.hpp"
+#include "duckdb/floe/floe_estimation_extension.hpp"
 #include "duckdb/optimizer/relation_statistics/relation_statistics_helper.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/filter/expression_filter.hpp"
@@ -20,20 +21,28 @@ static idx_t CountRowsKept(idx_t rows, double selectivity) {
 	return selectivity > 0 && rows > 0 ? MaxValue<idx_t>(kept, 1) : kept;
 }
 
-//! The rows `filter` keeps of `cardinality`: those its estimated selectivity keeps, estimated from `base_stats` first
-//! when it has none.
-static idx_t EstimateScanFilterRows(idx_t cardinality, TableFilter &filter, BaseStatistics &base_stats) {
+//! The rows `filter` of `get` keeps of `cardinality`: those its estimated selectivity keeps. When it has none, it is
+//! estimated from `base_stats`, if any, then by the estimation extensions.
+static idx_t EstimateScanFilterRows(ClientContext &context, LogicalGet &get, idx_t cardinality, TableFilter &filter,
+                                    optional_ptr<BaseStatistics> base_stats) {
 	auto &predicate = *ExpressionFilter::GetExpressionFilter(filter, "EstimateScanFilterRows").expr;
-	if (predicate.estimated_selectivity) {
-		return CountRowsKept(cardinality, predicate.estimated_selectivity->selectivity);
+	auto &selectivity = predicate.estimated_selectivity;
+	if (!selectivity && cardinality > 0) {
+		if (base_stats) {
+			auto source = SelectivitySource::DEFAULT;
+			auto rows = RelationStatisticsHelper::InspectTableFilter(cardinality, filter, *base_stats, source);
+			selectivity = EstimatedSelectivity {static_cast<double>(rows) / static_cast<double>(cardinality), source};
+		}
+		ReplacePredicateSelectivityWithExtensions(context, get, predicate, selectivity);
 	}
-	auto source = SelectivitySource::DEFAULT;
-	auto rows = RelationStatisticsHelper::InspectTableFilter(cardinality, filter, base_stats, source);
-	if (cardinality > 0) {
-		predicate.estimated_selectivity =
-		    EstimatedSelectivity {static_cast<double>(rows) / static_cast<double>(cardinality), source};
-	}
-	return rows;
+	return selectivity ? CountRowsKept(cardinality, selectivity->selectivity) : cardinality;
+}
+
+//! Whether an estimation extension estimated `filter`.
+static bool IsEstimatedByExtension(const TableFilter &filter) {
+	auto &selectivity =
+	    ExpressionFilter::GetExpressionFilter(filter, "IsEstimatedByExtension").expr->estimated_selectivity;
+	return selectivity && selectivity->source == SelectivitySource::EXTENSION;
 }
 
 //! Whether `filter`'s column statistics prove it keeps every row.
@@ -57,19 +66,21 @@ idx_t EstimateFilteredRows(ClientContext &context, LogicalGet &get, idx_t rows,
 			has_statistics = true;
 			continue;
 		}
+		// DuckDB does not estimate a filter on a column without statistics; an extension may.
+		rows_kept =
+		    MinValue(rows_kept, EstimateScanFilterRows(context, get, rows, entry.Filter(), column_statistics.get()));
 		auto &filter_selectivity = filter.expr->estimated_selectivity;
-		if (column_statistics) {
-			rows_kept = MinValue(rows_kept, EstimateScanFilterRows(rows, entry.Filter(), *column_statistics));
-		}
-		// Only a filter whose rows are counted decides the scan's selectivity.
-		if (column_statistics && filter_selectivity) {
+		if (filter_selectivity) {
 			has_statistics = has_statistics || filter_selectivity->source == SelectivitySource::STATISTICS;
-			if (filter_selectivity->selectivity < 1 &&
-			    (!fewest || filter_selectivity->selectivity < fewest->selectivity)) {
+			// A filter keeping every row by DuckDB's estimate does not decide the scan's; by an extension's it may.
+			auto decides =
+			    filter_selectivity->selectivity < 1 || filter_selectivity->source == SelectivitySource::EXTENSION;
+			if (decides && (!fewest || filter_selectivity->selectivity < fewest->selectivity)) {
 				fewest = filter_selectivity;
 			}
 		}
-		if (!ExpressionFilter::IsOptionalFilter(entry.Filter())) {
+		// DuckDB's default for filters that cut no row is not for those an extension estimated.
+		if (!ExpressionFilter::IsOptionalFilter(entry.Filter()) && !IsEstimatedByExtension(entry.Filter())) {
 			has_non_optional_filters = true;
 		}
 	}
@@ -79,7 +90,7 @@ idx_t EstimateFilteredRows(ClientContext &context, LogicalGet &get, idx_t rows,
 		                       1);
 	}
 	if (fewest) {
-		selectivity = fewest;
+		selectivity = std::move(fewest);
 	} else {
 		selectivity =
 		    EstimatedSelectivity {1, has_statistics ? SelectivitySource::STATISTICS : SelectivitySource::DEFAULT};
@@ -92,15 +103,18 @@ void EstimateScanFilters(LogicalGet &get, ClientContext &context) {
 	optional<EstimatedSelectivity> selectivity;
 	EstimateFilteredRows(context, get, rows, selectivity);
 	if (rows > 0) {
-		get.estimated_selectivity = selectivity;
+		get.estimated_selectivity = std::move(selectivity);
 	}
 }
 
-idx_t EstimateFilterCardinality(LogicalFilter &filter, idx_t child_cardinality) {
+idx_t EstimateFilterCardinality(ClientContext &context, LogicalFilter &filter, idx_t child_cardinality) {
 	if (!filter.estimated_selectivity) {
-		// One default for the filter, whatever its predicates.
+		// One default for the filter, whatever its predicates, unless the extensions estimate them.
+		auto selectivity = EstimateFilterWithExtensions(context, filter, RelationStatisticsHelper::DEFAULT_SELECTIVITY);
 		filter.estimated_selectivity =
-		    EstimatedSelectivity {RelationStatisticsHelper::DEFAULT_SELECTIVITY, SelectivitySource::DEFAULT};
+		    selectivity
+		        ? *selectivity
+		        : EstimatedSelectivity {RelationStatisticsHelper::DEFAULT_SELECTIVITY, SelectivitySource::DEFAULT};
 	}
 	return EstimateFilterRows(child_cardinality, filter.estimated_selectivity->selectivity);
 }
@@ -120,19 +134,19 @@ void EstimateResidualFilter(Expression &filter) {
 	}
 }
 
-void EstimateFiltersAddedLate(ClientContext &context, LogicalOperator &op) {
+//! Without an estimation extension, an optional filter alone does not trigger the estimate.
+static void EstimateFiltersAddedLate(ClientContext &context, LogicalOperator &op, bool has_estimation_extensions) {
 	for (auto &child : op.children) {
-		EstimateFiltersAddedLate(context, *child);
+		EstimateFiltersAddedLate(context, *child, has_estimation_extensions);
 	}
 	if (op.type == LogicalOperatorType::LOGICAL_GET) {
 		auto &get = op.Cast<LogicalGet>();
 		auto has_late_filter = !get.estimated_selectivity;
 		for (auto &entry : get.table_filters) {
 			auto &filter = entry.Filter();
-			has_late_filter =
-			    has_late_filter || (!ExpressionFilter::IsOptionalFilter(filter) &&
-			                        !ExpressionFilter::GetExpressionFilter(filter, "EstimateFiltersAddedLate")
-			                             .expr->estimated_selectivity);
+			auto &predicate = *ExpressionFilter::GetExpressionFilter(filter, "EstimateFiltersAddedLate").expr;
+			auto needs_estimate = has_estimation_extensions || !ExpressionFilter::IsOptionalFilter(filter);
+			has_late_filter = has_late_filter || (needs_estimate && !predicate.estimated_selectivity);
 		}
 		if (!get.table_filters.HasFilters() || !has_late_filter) {
 			return;
@@ -141,7 +155,18 @@ void EstimateFiltersAddedLate(ClientContext &context, LogicalOperator &op) {
 	} else if (op.type == LogicalOperatorType::LOGICAL_FILTER && !op.estimated_selectivity) {
 		op.estimated_selectivity =
 		    EstimatedSelectivity {RelationStatisticsHelper::DEFAULT_SELECTIVITY, SelectivitySource::DEFAULT};
+		auto selectivity = has_estimation_extensions
+		                       ? EstimateFilterWithExtensions(context, op.Cast<LogicalFilter>(),
+		                                                      RelationStatisticsHelper::DEFAULT_SELECTIVITY)
+		                       : nullopt;
+		if (selectivity) {
+			op.estimated_selectivity = std::move(selectivity);
+		}
 	}
+}
+
+void EstimateFiltersAddedLate(ClientContext &context, LogicalOperator &op) {
+	EstimateFiltersAddedLate(context, op, HasEstimationExtensions(context));
 }
 
 //! Adds `op` and the operators planned with it to `planned`, stopping at those in `planned_operators`.

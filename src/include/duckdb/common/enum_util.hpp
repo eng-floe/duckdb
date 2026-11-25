@@ -210,6 +210,8 @@ enum class DistinctType : uint8_t;
 
 enum class ErrorType : uint16_t;
 
+enum class EstimatedJoinType : uint8_t;
+
 enum class ExceptionFormatValueType : uint8_t;
 
 enum class ExceptionType : uint8_t;
@@ -941,6 +943,9 @@ const char* EnumUtil::ToChars<DistinctType>(DistinctType value);
 
 template<>
 const char* EnumUtil::ToChars<ErrorType>(ErrorType value);
+
+template<>
+const char* EnumUtil::ToChars<EstimatedJoinType>(EstimatedJoinType value);
 
 template<>
 const char* EnumUtil::ToChars<ExceptionFormatValueType>(ExceptionFormatValueType value);
@@ -1905,6 +1910,9 @@ DistinctType EnumUtil::FromString<DistinctType>(const char *value);
 
 template<>
 ErrorType EnumUtil::FromString<ErrorType>(const char *value);
+
+template<>
+EstimatedJoinType EnumUtil::FromString<EstimatedJoinType>(const char *value);
 
 template<>
 ExceptionFormatValueType EnumUtil::FromString<ExceptionFormatValueType>(const char *value);

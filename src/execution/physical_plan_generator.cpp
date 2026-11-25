@@ -12,6 +12,7 @@
 #include "duckdb/planner/operator/list.hpp"
 #include "duckdb/execution/operator/helper/physical_verify_vector.hpp"
 #include "duckdb/main/settings.hpp"
+#include "duckdb/floe/floe_estimation_extension.hpp"
 #include "duckdb/floe/floe_selectivity.hpp"
 
 namespace duckdb {
@@ -60,6 +61,7 @@ unique_ptr<PhysicalPlan> PhysicalPlanGenerator::PlanInternal(LogicalOperator &op
 	}
 	op.estimated_cardinality = op.EstimateCardinality(context);
 	floe_estimation::EstimateFiltersAddedLate(context, op);
+	floe_estimation::ReplaceOperatorCardinalitiesWithExtensions(context, op);
 	physical_plan->SetRoot(CreatePlan(op));
 	physical_plan->Root().estimated_cardinality = op.estimated_cardinality;
 

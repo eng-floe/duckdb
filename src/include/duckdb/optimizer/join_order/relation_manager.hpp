@@ -48,6 +48,10 @@ public:
 
 public:
 	idx_t NumRelations();
+	//! The root operator of relation `index`.
+	LogicalOperator &GetRelationOperator(idx_t index) const {
+		return relations[index]->op;
+	}
 
 	bool ExtractJoinRelations(JoinOrderOptimizer &optimizer, LogicalOperator &input_op,
 	                          vector<reference<LogicalOperator>> &filter_operators,

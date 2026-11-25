@@ -136,6 +136,7 @@
 #include "duckdb/execution/physical_table_scan_enum.hpp"
 #include "duckdb/execution/reservoir_sample.hpp"
 #include "duckdb/floe/floe_estimated_selectivity.hpp"
+#include "duckdb/floe/floe_estimation_extension.hpp"
 #include "duckdb/function/aggregate_function.hpp"
 #include "duckdb/function/aggregate_state.hpp"
 #include "duckdb/function/aggregate_state_serialization.hpp"
@@ -2064,6 +2065,26 @@ const char* EnumUtil::ToChars<ErrorType>(ErrorType value) {
 template<>
 ErrorType EnumUtil::FromString<ErrorType>(const char *value) {
 	return static_cast<ErrorType>(StringUtil::StringToEnum(GetErrorTypeValues(), 5, "ErrorType", value));
+}
+
+const StringUtil::EnumStringLiteral *GetEstimatedJoinTypeValues() {
+	static constexpr StringUtil::EnumStringLiteral values[] {
+		{ static_cast<uint32_t>(EstimatedJoinType::INNER), "INNER" },
+		{ static_cast<uint32_t>(EstimatedJoinType::LEFT), "LEFT" },
+		{ static_cast<uint32_t>(EstimatedJoinType::SEMI), "SEMI" },
+		{ static_cast<uint32_t>(EstimatedJoinType::ANTI), "ANTI" }
+	};
+	return values;
+}
+
+template<>
+const char* EnumUtil::ToChars<EstimatedJoinType>(EstimatedJoinType value) {
+	return StringUtil::EnumToString(GetEstimatedJoinTypeValues(), 4, "EstimatedJoinType", static_cast<uint32_t>(value));
+}
+
+template<>
+EstimatedJoinType EnumUtil::FromString<EstimatedJoinType>(const char *value) {
+	return static_cast<EstimatedJoinType>(StringUtil::StringToEnum(GetEstimatedJoinTypeValues(), 4, "EstimatedJoinType", value));
 }
 
 const StringUtil::EnumStringLiteral *GetExceptionFormatValueTypeValues() {
@@ -5787,19 +5808,20 @@ SelectivityOptionalFilterType EnumUtil::FromString<SelectivityOptionalFilterType
 const StringUtil::EnumStringLiteral *GetSelectivitySourceValues() {
 	static constexpr StringUtil::EnumStringLiteral values[] {
 		{ static_cast<uint32_t>(SelectivitySource::STATISTICS), "STATISTICS" },
-		{ static_cast<uint32_t>(SelectivitySource::DEFAULT), "DEFAULT" }
+		{ static_cast<uint32_t>(SelectivitySource::DEFAULT), "DEFAULT" },
+		{ static_cast<uint32_t>(SelectivitySource::EXTENSION), "EXTENSION" }
 	};
 	return values;
 }
 
 template<>
 const char* EnumUtil::ToChars<SelectivitySource>(SelectivitySource value) {
-	return StringUtil::EnumToString(GetSelectivitySourceValues(), 2, "SelectivitySource", static_cast<uint32_t>(value));
+	return StringUtil::EnumToString(GetSelectivitySourceValues(), 3, "SelectivitySource", static_cast<uint32_t>(value));
 }
 
 template<>
 SelectivitySource EnumUtil::FromString<SelectivitySource>(const char *value) {
-	return static_cast<SelectivitySource>(StringUtil::StringToEnum(GetSelectivitySourceValues(), 2, "SelectivitySource", value));
+	return static_cast<SelectivitySource>(StringUtil::StringToEnum(GetSelectivitySourceValues(), 3, "SelectivitySource", value));
 }
 
 const StringUtil::EnumStringLiteral *GetSequenceInfoValues() {

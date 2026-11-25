@@ -136,7 +136,7 @@ RelationStats RelationStatisticsHelper::ExtractGetStats(LogicalGet &get, ClientC
 		if (base_table_cardinality == 0) {
 			cardinality_after_filters = 0;
 		} else {
-			get.estimated_selectivity = selectivity;
+			get.estimated_selectivity = std::move(selectivity);
 		}
 	}
 

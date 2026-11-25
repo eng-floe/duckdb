@@ -8,6 +8,7 @@
 #pragma once
 
 #include "duckdb/common/reference_map.hpp"
+#include "duckdb/floe/floe_estimation_extension.hpp"
 #include "duckdb/optimizer/join_order/cardinality_value.hpp"
 #include "duckdb/optimizer/join_order/join_order_operator.hpp"
 #include "duckdb/optimizer/join_order/join_relation_set.hpp"
@@ -34,6 +35,8 @@ public:
 	                const vector<unique_ptr<JoinOrderOperator>> &operators = {});
 	//! All equivalent plans in a memo group share this estimate.
 	CardinalityValue EstimateCardinality(JoinRelationSet &set);
+	//! Has the estimation extensions of `context` replace each join estimate of `query_graph` before it is kept.
+	void UseEstimationExtensions(ClientContext &context, QueryGraphManager &query_graph);
 
 private:
 	void InitEquivalentRelations();
@@ -79,6 +82,9 @@ private:
 	unique_ptr<CardinalityEstimatorState> state;
 	JoinRelationSetManager &set_manager;
 	const JoinPredicateModel &predicate_model;
+
+	optional_ptr<ClientContext> extension_context;
+	optional_ptr<QueryGraphManager> extension_query_graph;
 };
 
 } // namespace duckdb

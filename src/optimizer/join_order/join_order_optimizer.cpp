@@ -1,4 +1,5 @@
 #include "duckdb/optimizer/join_order/join_order_optimizer.hpp"
+#include "duckdb/floe/floe_estimation_extension.hpp"
 
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/common/limits.hpp"
@@ -137,6 +138,9 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 		// query graph now has filters and relations
 		auto cardinality_estimator =
 		    CardinalityEstimator(query_graph_manager.set_manager, query_graph_manager.GetPredicateModel());
+		if (floe_estimation::HasEstimationExtensions(context)) {
+			cardinality_estimator.UseEstimationExtensions(context, query_graph_manager);
+		}
 		auto cost_model = CostModel(cardinality_estimator);
 
 		// Initialize a plan enumerator.
@@ -162,6 +166,9 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 		}
 	}
 
+	if (depth == 1) {
+		floe_estimation::ReplaceOperatorCardinalitiesWithExtensions(context, *new_logical_plan);
+	}
 	auto root_cardinality = new_logical_plan->EstimateCardinality(context);
 
 	// Propagate up a stats object from the top of the new_logical_plan if stats exist.
