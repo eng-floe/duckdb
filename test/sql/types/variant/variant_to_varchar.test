@@ -92,15 +92,16 @@ SELECT (repeat('[', 127) || '1' || repeat(']', 127))::JSON::VARIANT::VARCHAR = r
 true
 
 # the nesting limit the two depth-error cases upstream check for does not exist here: past 128 the
-# serializer declines and the value path renders the row, so the cast succeeds instead of erroring
+# serializer declines and the value path renders the row, so the cast succeeds instead of erroring.
+# 129 levels, not 128: the outermost sits at depth 0, so only the 129th reaches object_entries[128]
 
 query I
-SELECT (repeat('[', 128) || '1' || repeat(']', 128))::JSON::VARIANT::VARCHAR = repeat('[', 128) || '1' || repeat(']', 128)
+SELECT (repeat('[', 129) || '1' || repeat(']', 129))::JSON::VARIANT::VARCHAR = repeat('[', 129) || '1' || repeat(']', 129)
 ----
 true
 
 query I
-SELECT (repeat('{"a": ', 128) || '1' || repeat('}', 128))::JSON::VARIANT::VARCHAR = repeat('{''a'': ', 128) || '1' || repeat('}', 128)
+SELECT (repeat('{"a": ', 129) || '1' || repeat('}', 129))::JSON::VARIANT::VARCHAR = repeat('{''a'': ', 129) || '1' || repeat('}', 129)
 ----
 true
 
