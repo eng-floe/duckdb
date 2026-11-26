@@ -95,6 +95,16 @@ true
 # serializer declines and the value path renders the row, so the cast succeeds instead of erroring
 
 query I
+SELECT (repeat('[', 128) || '1' || repeat(']', 128))::JSON::VARIANT::VARCHAR = repeat('[', 128) || '1' || repeat(']', 128)
+----
+true
+
+query I
+SELECT (repeat('{"a": ', 128) || '1' || repeat('}', 128))::JSON::VARIANT::VARCHAR = repeat('{''a'': ', 128) || '1' || repeat('}', 128)
+----
+true
+
+query I
 SELECT {'d': DATE '2024-01-01', 'i': INTERVAL 1 DAY, 'u': '00000000-0000-0000-0000-000000000001'::UUID, 'n': 1.50::DECIMAL(4,2), 'h': 170141183460469231731687303715884105727::HUGEINT}::VARIANT::VARCHAR
 ----
 {'d': 2024-01-01, 'h': 170141183460469231731687303715884105727, 'i': 1 day, 'n': 1.50, 'u': 00000000-0000-0000-0000-000000000001}
