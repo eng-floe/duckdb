@@ -156,6 +156,7 @@ unique_ptr<LogicalOperator> FilterPushdown::SplitProjection(unique_ptr<LogicalOp
 	}
 	lower_projection->children.push_back(std::move(op->children[0]));
 	op->children[0] = AddLogicalFilter(std::move(lower_projection), std::move(split_expressions));
+	TakeChildCardinality(*op);
 	return op;
 }
 
@@ -215,6 +216,7 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownProjection(unique_ptr<Logica
 		// child returns an empty result: generate an empty result here too
 		return make_uniq<LogicalEmptyResult>(std::move(op));
 	}
+	TakeChildCardinality(*op);
 	if (!split_expressions.empty()) {
 		op = SplitProjection(std::move(op), std::move(split_expressions));
 	}

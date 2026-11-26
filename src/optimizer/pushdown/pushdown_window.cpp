@@ -50,6 +50,7 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownWindow(unique_ptr<LogicalOpe
 			}
 		}
 		op->children[0] = pushdown.Rewrite(std::move(op->children[0]));
+		TakeChildCardinality(*op);
 		filters = std::move(leftover_filters);
 		return PushFinalFilters(std::move(op));
 	}
@@ -105,6 +106,7 @@ unique_ptr<LogicalOperator> FilterPushdown::PushdownWindow(unique_ptr<LogicalOpe
 		}
 	}
 	op->children[0] = pushdown.Rewrite(std::move(op->children[0]));
+	TakeChildCardinality(*op);
 	filters = std::move(leftover_filters);
 	return PushFinalFilters(std::move(op));
 }

@@ -62,6 +62,21 @@ optional_ptr<PhysicalOperator> FindPhysical(PhysicalOperator &op, PhysicalOperat
 	return nullptr;
 }
 
+//! An operator of type `type` whose child is of type `child_type`.
+optional_ptr<LogicalOperator> FindLogicalAbove(LogicalOperator &op, LogicalOperatorType type,
+                                               LogicalOperatorType child_type) {
+	if (op.type == type && op.children.size() == 1 && op.children[0]->type == child_type) {
+		return op;
+	}
+	for (auto &child : op.children) {
+		auto found = FindLogicalAbove(*child, type, child_type);
+		if (found) {
+			return found;
+		}
+	}
+	return nullptr;
+}
+
 //! The predicate of the only filter in `filters`.
 Expression &GetOnlyPredicate(TableFilterSet &filters) {
 	optional_ptr<Expression> result;
@@ -343,6 +358,61 @@ TEST_CASE("A filter operator built after join ordering gets a selectivity at phy
 	REQUIRE(filter->estimated_selectivity->selectivity == RelationStatisticsHelper::DEFAULT_SELECTIVITY);
 	REQUIRE(filter->estimated_selectivity->source == SelectivitySource::DEFAULT);
 	con.Rollback();
+}
+
+TEST_CASE("A filter rebuilt after join ordering gets DuckDB's default share of its child's rows",
+          "[optimizer][estimation]") {
+	DuckDB db(nullptr);
+	Connection con(db);
+	CreateTables(con);
+
+	// Statistics propagation filters `big.k` to `small`'s range, and filter pushdown then rebuilds the filter above
+	// `big`.
+	auto logical = con.ExtractPlan("SELECT * FROM big JOIN small ON big.k = small.k WHERE random() < big.v");
+	auto filter = FindLogicalFilter(*logical);
+	REQUIRE(filter);
+	REQUIRE(filter->children[0]->type == LogicalOperatorType::LOGICAL_GET);
+	REQUIRE(filter->children[0]->Cast<LogicalGet>().table_filters.HasFilters());
+	auto child_rows = static_cast<double>(filter->children[0]->estimated_cardinality);
+	REQUIRE(filter->estimated_cardinality == idx_t(child_rows * RelationStatisticsHelper::DEFAULT_SELECTIVITY));
+}
+
+TEST_CASE("A projection takes its child's count after filter pushdown", "[optimizer][estimation]") {
+	DuckDB db(nullptr);
+	Connection con(db);
+	REQUIRE_NO_FAIL(con.Query("CREATE TABLE t AS SELECT (i % 3000)::INTEGER AS x FROM range(300000) r(i)"));
+	REQUIRE_NO_FAIL(con.Query("CREATE TABLE b AS SELECT (1000 + i % 500)::INTEGER AS lo, (1050 + i % 500)::INTEGER "
+	                          "AS hi FROM range(100000) r(i)"));
+
+	// Compressed materialization projects the aggregate's narrowed `x` back; statistics propagation filters `x` to
+	// `b`'s range and filter pushdown then moves the filter on `c` below that projection.
+	auto logical = con.ExtractPlan("SELECT count(*) FROM (SELECT x, count(*) AS c FROM t GROUP BY x) a "
+	                               "JOIN b ON a.x >= b.lo AND a.x <= b.hi WHERE a.c > 5");
+	auto projection =
+	    FindLogicalAbove(*logical, LogicalOperatorType::LOGICAL_PROJECTION, LogicalOperatorType::LOGICAL_FILTER);
+	REQUIRE(projection);
+	auto &filter = *projection->children[0];
+	REQUIRE(filter.children.size() == 1);
+	REQUIRE(filter.children[0]->type == LogicalOperatorType::LOGICAL_AGGREGATE_AND_GROUP_BY);
+	REQUIRE(projection->estimated_cardinality == filter.estimated_cardinality);
+}
+
+TEST_CASE("A window takes its child's count after filter pushdown", "[optimizer][estimation]") {
+	DuckDB db(nullptr);
+	Connection con(db);
+	REQUIRE_NO_FAIL(con.Query("CREATE TABLE t AS SELECT (i % 3000)::INTEGER AS x FROM range(300000) r(i)"));
+	REQUIRE_NO_FAIL(con.Query("CREATE TABLE b AS SELECT (1000 + i % 500)::INTEGER AS lo, (1050 + i % 500)::INTEGER "
+	                          "AS hi FROM range(100000) r(i)"));
+
+	// Statistics propagation filters `x` to `b`'s range; filter pushdown moves that filter below the outer window,
+	// partitioned by `x`, and the projection under it, and stops at the inner window.
+	auto logical = con.ExtractPlan("SELECT sum(a.n + a.m) FROM (SELECT x, m, row_number() OVER (PARTITION BY x) AS n "
+	                               "FROM (SELECT x, row_number() OVER (PARTITION BY x % 7) AS m FROM t)) a "
+	                               "JOIN b ON a.x >= b.lo AND a.x <= b.hi");
+	auto window =
+	    FindLogicalAbove(*logical, LogicalOperatorType::LOGICAL_WINDOW, LogicalOperatorType::LOGICAL_PROJECTION);
+	REQUIRE(window);
+	REQUIRE(window->estimated_cardinality == window->children[0]->estimated_cardinality);
 }
 
 TEST_CASE("A filter join ordering applies across relations has DuckDB's default selectivity",

@@ -1,6 +1,8 @@
 #include "duckdb/optimizer/filter_pushdown.hpp"
 #include "duckdb/optimizer/filter_combiner.hpp"
 #include "duckdb/optimizer/optimizer.hpp"
+#include "duckdb/optimizer/relation_statistics/relation_statistics_helper.hpp"
+#include "duckdb/floe/floe_selectivity.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
@@ -234,6 +236,13 @@ void FilterPushdown::GenerateFilters() {
 	});
 }
 
+void FilterPushdown::TakeChildCardinality(LogicalOperator &op) {
+	auto &child = *op.children[0];
+	if (child.has_estimated_cardinality) {
+		op.SetEstimatedCardinality(child.estimated_cardinality);
+	}
+}
+
 unique_ptr<LogicalOperator> FilterPushdown::AddLogicalFilter(unique_ptr<LogicalOperator> op,
                                                              vector<unique_ptr<Expression>> expressions) {
 	if (expressions.empty()) {
@@ -245,17 +254,13 @@ unique_ptr<LogicalOperator> FilterPushdown::AddLogicalFilter(unique_ptr<LogicalO
 	std::stable_partition(expressions.begin(), expressions.end(),
 	                      [](const unique_ptr<Expression> &expr) { return !ExpressionBarrier::Contains(*expr); });
 	auto filter = make_uniq<LogicalFilter>();
-	if (op->has_estimated_cardinality) {
-		// set the filter's estimated cardinality as the child op's.
-		// if the filter is created during the filter pushdown optimization, the estimated cardinality will be later
-		// overridden during the join order optimization to a more accurate one.
-		// if the filter is created during the statistics propagation, the estimated cardinality won't be set unless set
-		// here. assuming the filters introduced during the statistics propagation have little effect in reducing the
-		// cardinality, we adopt the the cardinality of the child. this could be improved by MinMax info from the
-		// statistics propagation
-		filter->SetEstimatedCardinality(op->estimated_cardinality);
-	}
 	filter->expressions = std::move(expressions);
+	if (op->has_estimated_cardinality) {
+		// A child with an estimate gives the filter the default share of its rows join ordering gives a filter. Its
+		// selectivity is left to what estimates the filter next: join ordering, else physical planning.
+		filter->SetEstimatedCardinality(floe_estimation::EstimateFilterRows(
+		    op->estimated_cardinality, RelationStatisticsHelper::DEFAULT_SELECTIVITY));
+	}
 	filter->children.push_back(std::move(op));
 	return std::move(filter);
 }
