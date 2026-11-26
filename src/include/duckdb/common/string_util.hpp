@@ -260,6 +260,9 @@ public:
 	//! Case insensitive compare
 	DUCKDB_API static bool CILessThan(const string &l1, const string &l2);
 
+	//! Case insensitive compare, without copying into strings
+	DUCKDB_API static bool CILessThan(const char *l1, idx_t l1_size, const char *l2, idx_t l2_size);
+
 	//! Case insensitive find, returns DConstants::INVALID_INDEX if not found
 	DUCKDB_API static idx_t CIFind(vector<string> &vec, const string &str);
 	DUCKDB_API static idx_t CIFind(const vector<Identifier> &vec, const Identifier &str);

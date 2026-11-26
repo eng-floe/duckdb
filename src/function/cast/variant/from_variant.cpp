@@ -295,7 +295,8 @@ private:
 			entries.push_back(ObjectEntry {key, variant.GetValuesIndex(row, nested_data.children_idx + i)});
 		}
 		std::sort(entries.begin(), entries.end(), [](const ObjectEntry &left, const ObjectEntry &right) {
-			return StringUtil::CILessThan(left.key.GetString(), right.key.GetString());
+			return StringUtil::CILessThan(left.key.GetData(), left.key.GetSize(), right.key.GetData(),
+			                              right.key.GetSize());
 		});
 		for (idx_t i = 1; i < entries.size(); i++) {
 			auto &left = entries[i - 1].key;
