@@ -50,7 +50,9 @@ public:
 	static constexpr double DEFAULT_SELECTIVITY = 0.2;
 
 public:
-	static idx_t InspectTableFilter(idx_t cardinality, const TableFilter &filter, BaseStatistics &base_stats);
+	//! The rows `filter` keeps of `cardinality`; `source` gets whether statistics or a default gave them.
+	static idx_t InspectTableFilter(idx_t cardinality, const TableFilter &filter, BaseStatistics &base_stats,
+	                                SelectivitySource &source);
 	static RelationStats ExtractGetStats(LogicalGet &get, ClientContext &context);
 	static RelationStats ExtractDelimGetStats(LogicalDelimGet &delim_get, ClientContext &context);
 	static RelationStats ExtractDummyScanStats(LogicalDummyScan &dummy_scan, ClientContext &context);
@@ -97,7 +99,6 @@ public:
 	static optional_idx EstimateDirectFilterDomain(const Expression &expression, optional<ColumnBinding> target_binding,
 	                                               idx_t maximum_domain);
 
-private:
 	static unique_ptr<BaseStatistics> GetColumnStatistics(LogicalGet &get, ClientContext &context,
 	                                                      const ColumnIndex &column_id);
 };

@@ -198,6 +198,8 @@ private:
 	ClientContext &context;
 	unique_ptr<PhysicalPlan> physical_plan;
 	reference_set_t<const PhysicalOperator> non_repeatable_operators;
+	//! The physical operators already planned, which a later operator planned as one of them gives no selectivity
+	reference_set_t<const PhysicalOperator> planned_operators;
 
 private:
 	PhysicalOperator &CreatePlanInternal(LogicalOperator &op);

@@ -530,6 +530,8 @@ enum class SegmentTreeVerifyMode : uint8_t;
 
 enum class SelectivityOptionalFilterType : uint8_t;
 
+enum class SelectivitySource : uint8_t;
+
 enum class SequenceInfo : uint8_t;
 
 enum class SerializationVersionDeprecated : uint64_t;
@@ -1419,6 +1421,9 @@ const char* EnumUtil::ToChars<SegmentTreeVerifyMode>(SegmentTreeVerifyMode value
 
 template<>
 const char* EnumUtil::ToChars<SelectivityOptionalFilterType>(SelectivityOptionalFilterType value);
+
+template<>
+const char* EnumUtil::ToChars<SelectivitySource>(SelectivitySource value);
 
 template<>
 const char* EnumUtil::ToChars<SequenceInfo>(SequenceInfo value);
@@ -2380,6 +2385,9 @@ SegmentTreeVerifyMode EnumUtil::FromString<SegmentTreeVerifyMode>(const char *va
 
 template<>
 SelectivityOptionalFilterType EnumUtil::FromString<SelectivityOptionalFilterType>(const char *value);
+
+template<>
+SelectivitySource EnumUtil::FromString<SelectivitySource>(const char *value);
 
 template<>
 SequenceInfo EnumUtil::FromString<SequenceInfo>(const char *value);

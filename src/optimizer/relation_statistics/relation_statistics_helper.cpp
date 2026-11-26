@@ -1,5 +1,6 @@
 #include "duckdb/optimizer/relation_statistics/relation_statistics_helper.hpp"
 #include "duckdb/optimizer/relation_statistics/relation_statistics_extractor.hpp"
+#include "duckdb/floe/floe_selectivity.hpp"
 
 #include "duckdb/common/types/value_map.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
@@ -572,10 +573,7 @@ optional<RelationStats> RelationStatisticsHelper::ExtractFilterStats(LogicalFilt
 	if (!result) {
 		return {};
 	}
-	auto cardinality = child_stats.cardinality;
-	if (cardinality > 0) {
-		cardinality = MaxValue<idx_t>(LossyNumericCast<idx_t>(double(cardinality) * DEFAULT_SELECTIVITY), 1);
-	}
+	auto cardinality = floe_estimation::EstimateFilterCardinality(filter, child_stats.cardinality);
 	ApplyCardinality(*result, cardinality);
 	for (auto &column : result->columns) {
 		for (auto &expression : filter.expressions) {

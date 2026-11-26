@@ -5,6 +5,7 @@
 #include "duckdb/common/operator/subtract.hpp"
 #include "duckdb/common/types/hugeint.hpp"
 #include "duckdb/function/table/table_scan.hpp"
+#include "duckdb/floe/floe_selectivity.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/operator/logical_delim_get.hpp"
@@ -129,30 +130,13 @@ RelationStats RelationStatisticsHelper::ExtractGetStats(LogicalGet &get, ClientC
 	result.table_name = get.GetTable() ? get.GetTable()->name : Identifier(get.GetName());
 
 	if (get.table_filters.HasFilters()) {
-		bool has_non_optional_filters = false;
-		for (auto &entry : get.table_filters) {
-			auto &column_index = get.GetColumnIndex(entry.GetIndex());
-			auto column_statistics = GetColumnStatistics(get, context, column_index);
-			if (column_statistics) {
-				auto &filter = ExpressionFilter::GetExpressionFilter(entry.Filter(), "ExtractGetStats");
-				if (filter.column_indexes.size() <= 1 &&
-				    filter.CheckStatistics(context, *column_statistics) == FilterPropagateResult::FILTER_ALWAYS_TRUE) {
-					continue;
-				}
-				cardinality_after_filters =
-				    MinValue(cardinality_after_filters,
-				             InspectTableFilter(base_table_cardinality, entry.Filter(), *column_statistics));
-			}
-			if (!ExpressionFilter::IsOptionalFilter(entry.Filter())) {
-				has_non_optional_filters = true;
-			}
-		}
-		if (cardinality_after_filters == base_table_cardinality && has_non_optional_filters) {
-			cardinality_after_filters =
-			    MaxValue<idx_t>(LossyNumericCast<idx_t>(double(base_table_cardinality) * DEFAULT_SELECTIVITY), 1);
-		}
+		optional<EstimatedSelectivity> selectivity;
+		cardinality_after_filters =
+		    floe_estimation::EstimateFilteredRows(context, get, base_table_cardinality, selectivity);
 		if (base_table_cardinality == 0) {
 			cardinality_after_filters = 0;
+		} else {
+			get.estimated_selectivity = selectivity;
 		}
 	}
 
@@ -252,8 +236,9 @@ RelationStats RelationStatisticsHelper::ExtractColumnDataGetStats(LogicalColumnD
 }
 
 idx_t RelationStatisticsHelper::InspectTableFilter(idx_t cardinality, const TableFilter &filter,
-                                                   BaseStatistics &base_stats) {
+                                                   BaseStatistics &base_stats, SelectivitySource &source) {
 	auto cardinality_after_filters = cardinality;
+	source = SelectivitySource::DEFAULT;
 	auto &expr_filter = ExpressionFilter::GetExpressionFilter(filter, "RelationStatisticsHelper::InspectTableFilter");
 	auto &expr = *expr_filter.expr;
 	if (expr.GetExpressionClass() == ExpressionClass::BOUND_FUNCTION) {
@@ -270,8 +255,15 @@ idx_t RelationStatisticsHelper::InspectTableFilter(idx_t cardinality, const Tabl
 		auto &conjunction = expr.Cast<BoundConjunctionExpression>();
 		for (auto &child : conjunction.GetChildren()) {
 			ExpressionFilter child_filter(child->Copy());
-			cardinality_after_filters =
-			    MinValue(cardinality_after_filters, InspectTableFilter(cardinality, child_filter, base_stats));
+			auto child_source = SelectivitySource::DEFAULT;
+			auto child_rows = InspectTableFilter(cardinality, child_filter, base_stats, child_source);
+			// On a tie, statistics are the better source.
+			auto is_better_source =
+			    child_rows == cardinality_after_filters && child_source == SelectivitySource::STATISTICS;
+			if (child_rows < cardinality_after_filters || is_better_source) {
+				cardinality_after_filters = child_rows;
+				source = child_source;
+			}
 		}
 		return cardinality_after_filters;
 	}
@@ -285,6 +277,7 @@ idx_t RelationStatisticsHelper::InspectTableFilter(idx_t cardinality, const Tabl
 	auto column_count = GetDistinctCountFromStats(base_stats, cardinality).distinct_count;
 	if (column_count > 0) {
 		cardinality_after_filters = (cardinality + column_count - 1) / column_count;
+		source = SelectivitySource::STATISTICS;
 	}
 	return cardinality_after_filters;
 }

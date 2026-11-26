@@ -12,6 +12,7 @@
 #include "duckdb/planner/operator/list.hpp"
 #include "duckdb/execution/operator/helper/physical_verify_vector.hpp"
 #include "duckdb/main/settings.hpp"
+#include "duckdb/floe/floe_selectivity.hpp"
 
 namespace duckdb {
 
@@ -58,6 +59,7 @@ unique_ptr<PhysicalPlan> PhysicalPlanGenerator::PlanInternal(LogicalOperator &op
 		physical_plan = make_uniq<PhysicalPlan>(Allocator::Get(context));
 	}
 	op.estimated_cardinality = op.EstimateCardinality(context);
+	floe_estimation::EstimateFiltersAddedLate(context, op);
 	physical_plan->SetRoot(CreatePlan(op));
 	physical_plan->Root().estimated_cardinality = op.estimated_cardinality;
 
@@ -75,6 +77,7 @@ unique_ptr<PhysicalPlan> PhysicalPlanGenerator::PlanInternal(LogicalOperator &op
 PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalOperator &op) {
 	const auto repeatable = ClassifyLogicalOperatorRepeatability(op) == LogicalOperatorRepeatability::REPEATABLE;
 	auto &result = CreatePlanInternal(op);
+	floe_estimation::GiveSelectivityToPlannedOperators(result, op.estimated_selectivity, planned_operators);
 	if (!repeatable) {
 		non_repeatable_operators.insert(result);
 	}

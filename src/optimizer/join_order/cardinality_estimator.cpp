@@ -2,6 +2,7 @@
 #include "duckdb/common/limits.hpp"
 #include "duckdb/optimizer/join_order/join_order_operator.hpp"
 #include "duckdb/optimizer/join_order/join_predicate.hpp"
+#include "duckdb/floe/floe_selectivity.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 
@@ -246,6 +247,9 @@ void CardinalityEstimator::InitEquivalentRelations() {
 	for (auto predicate_ref : predicate_model.GetPredicates()) {
 		auto &filter = predicate_ref.get().GetFilter();
 		if (IsResidualFilter(filter)) {
+			if (filter.filter) {
+				floe_estimation::EstimateResidualFilter(*filter.filter);
+			}
 			state->residual_filters.push_back(filter);
 			continue;
 		}

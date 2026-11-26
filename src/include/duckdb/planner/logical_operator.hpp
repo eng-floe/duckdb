@@ -51,6 +51,8 @@ public:
 	//! Estimated Cardinality
 	idx_t estimated_cardinality;
 	bool has_estimated_cardinality;
+	//! The selectivity estimated for a scan or a filter: of its table's rows for a scan
+	optional<EstimatedSelectivity> estimated_selectivity;
 
 public:
 	virtual LogicalPlanSQLExportResult ToSQL(LogicalPlanSQLExportContext &context,
