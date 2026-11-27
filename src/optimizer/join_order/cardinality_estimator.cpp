@@ -751,6 +751,11 @@ CardinalityValue CardinalityEstimator::GetJoinSelectivity(JoinRelationSet &set, 
 	return MinValue(CardinalityValue(1), combined / left_domains / right_domains);
 }
 
+void CardinalityEstimator::UseEstimationExtensions(ClientContext &context, QueryGraphManager &query_graph) {
+	extension_context = context;
+	extension_query_graph = query_graph;
+}
+
 CardinalityValue CardinalityEstimator::EstimateCardinality(JoinRelationSet &set) {
 	D_ASSERT(!state->leaf_cardinalities.empty() && !set.Empty());
 	auto entry = state->cardinalities.find(set);
@@ -772,6 +777,7 @@ CardinalityValue CardinalityEstimator::EstimateCardinality(JoinRelationSet &set)
 		}
 	}
 	CardinalityValue result;
+	floe_estimation::JoinEstimateSides sides {JoinOrderOperatorType::INNER, nullptr, nullptr, nullptr};
 	if (!boundary) {
 		result = GetNumerator(set) * GetInnerSelectivity(set);
 		for (idx_t i = 0; i < set.count; i++) {
@@ -782,6 +788,7 @@ CardinalityValue CardinalityEstimator::EstimateCardinality(JoinRelationSet &set)
 		}
 	} else if (region->count < set.count) {
 		auto &remaining = set_manager.Difference(set, *region);
+		sides = {JoinOrderOperatorType::INNER, region, remaining, nullptr};
 		result =
 		    EstimateCardinality(*region) * EstimateCardinality(remaining) * GetJoinSelectivity(set, *region, remaining);
 	} else {
@@ -789,6 +796,7 @@ CardinalityValue CardinalityEstimator::EstimateCardinality(JoinRelationSet &set)
 		auto &left = set_manager.Intersection(set, op.left_relations);
 		auto &right = set_manager.Intersection(set, op.right_relations);
 		D_ASSERT(!left.Empty() && !right.Empty() && left.count < set.count && right.count < set.count);
+		sides = {op.type, left, right, op};
 		auto left_rows = EstimateCardinality(left);
 		auto right_rows = EstimateCardinality(right);
 		if (op.type == JoinOrderOperatorType::LEFT) {
@@ -800,6 +808,15 @@ CardinalityValue CardinalityEstimator::EstimateCardinality(JoinRelationSet &set)
 		}
 		// Filters above the boundary see its output, including NULL-extended LEFT rows.
 		result *= GetJoinSelectivity(set, left, right);
+	}
+	if (extension_context) {
+		auto duckdb_cardinality = result.GetDouble();
+		auto cardinality = duckdb_cardinality;
+		floe_estimation::ReplaceJoinEstimateWithExtensions(*extension_context, *extension_query_graph, *this, set,
+		                                                   sides, cardinality);
+		if (cardinality != duckdb_cardinality) {
+			result = CardinalityValue(cardinality);
+		}
 	}
 	state->cardinalities.emplace(set, result);
 	return result;

@@ -338,7 +338,7 @@ RelationStatisticsHelper::ExtractOperatorStats(LogicalOperator &op, ClientContex
 		if (child_stats.size() != 1) {
 			return {};
 		}
-		return ExtractFilterStats(op.Cast<LogicalFilter>(), child_stats[0].get());
+		return ExtractFilterStats(context, op.Cast<LogicalFilter>(), child_stats[0].get());
 	}
 	case LogicalOperatorType::LOGICAL_UNNEST:
 		return ExtractUnnestStats(op, child_stats[0].get());

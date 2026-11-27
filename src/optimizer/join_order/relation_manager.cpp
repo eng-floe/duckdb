@@ -3,6 +3,7 @@
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/common/enums/logical_operator_type.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/floe/floe_estimation_extension.hpp"
 #include "duckdb/optimizer/join_order/join_order_optimizer.hpp"
 #include "duckdb/optimizer/join_order/join_relation_set.hpp"
 #include "duckdb/optimizer/relation_statistics/relation_statistics_helper.hpp"
@@ -69,6 +70,7 @@ bool RelationManager::AddRelation(LogicalOperator &op, optional_ptr<LogicalOpera
 		stats_complete = false;
 		return false;
 	}
+	floe_estimation::ReplaceRelationEstimateWithExtensions(context, op, *aligned_stats);
 	auto relation = make_uniq<SingleJoinRelation>(op, parent, std::move(*aligned_stats));
 	RelationIndex relation_id(relations.size());
 

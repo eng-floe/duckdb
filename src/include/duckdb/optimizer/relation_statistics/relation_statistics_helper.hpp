@@ -67,7 +67,8 @@ public:
 	                                                       const RelationStats &child_stats, ClientContext &context);
 	static optional<RelationStats> ExtractWindowStats(LogicalWindow &window, const RelationStats &child_stats);
 	static optional<RelationStats> ExtractDistinctStats(LogicalDistinct &distinct, const RelationStats &child_stats);
-	static optional<RelationStats> ExtractFilterStats(LogicalFilter &filter, const RelationStats &child_stats);
+	static optional<RelationStats> ExtractFilterStats(ClientContext &context, LogicalFilter &filter,
+	                                                  const RelationStats &child_stats);
 	static optional<RelationStats> ExtractLimitStats(LogicalLimit &limit, const RelationStats &child_stats);
 	static RelationStats ExtractEmptyResultStats(LogicalEmptyResult &empty);
 	static optional<RelationStats> ProjectOutputStats(const RelationStats &stats, LogicalOperator &op);

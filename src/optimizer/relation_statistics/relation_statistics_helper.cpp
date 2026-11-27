@@ -567,13 +567,13 @@ optional<RelationStats> RelationStatisticsHelper::ExtractDistinctStats(LogicalDi
 	return result;
 }
 
-optional<RelationStats> RelationStatisticsHelper::ExtractFilterStats(LogicalFilter &filter,
+optional<RelationStats> RelationStatisticsHelper::ExtractFilterStats(ClientContext &context, LogicalFilter &filter,
                                                                      const RelationStats &child_stats) {
 	auto result = ProjectOutputStats(child_stats, filter);
 	if (!result) {
 		return {};
 	}
-	auto cardinality = floe_estimation::EstimateFilterCardinality(filter, child_stats.cardinality);
+	auto cardinality = floe_estimation::EstimateFilterCardinality(context, filter, child_stats.cardinality);
 	ApplyCardinality(*result, cardinality);
 	for (auto &column : result->columns) {
 		for (auto &expression : filter.expressions) {
