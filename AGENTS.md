@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Please also read Floe's [fork management document](./DUCKDB_FORK_MANAGEMENT.md).
+
 This file provides guidance to coding agents when working with code in this repository.
 
 ## Overview
