@@ -543,20 +543,24 @@ bool StringUtil::CIEndsWith(const string &str, const string &suffix) {
 	return CIEquals(str.c_str() + str.size() - suffix.size(), suffix.size(), suffix.c_str(), suffix.size());
 }
 
-bool StringUtil::CILessThan(const string &s1, const string &s2) {
+bool StringUtil::CILessThan(const char *l1, idx_t l1_size, const char *l2, idx_t l2_size) {
 	const auto charmap = ASCII_TO_UPPER_MAP;
 
 	// compare the common prefix byte-by-byte (treating an embedded NUL as a regular byte)
-	const idx_t length = MinValue<idx_t>(s1.length(), s2.length());
+	const idx_t length = MinValue<idx_t>(l1_size, l2_size);
 	for (idx_t i = 0; i < length; i++) {
-		const auto u1 = charmap[(unsigned char)s1[i]];
-		const auto u2 = charmap[(unsigned char)s2[i]];
+		const auto u1 = charmap[(unsigned char)l1[i]];
+		const auto u2 = charmap[(unsigned char)l2[i]];
 		if (u1 != u2) {
 			return u1 < u2;
 		}
 	}
 	// the prefixes are equal - the shorter string sorts first
-	return s1.length() < s2.length();
+	return l1_size < l2_size;
+}
+
+bool StringUtil::CILessThan(const string &s1, const string &s2) {
+	return CILessThan(s1.c_str(), s1.length(), s2.c_str(), s2.length());
 }
 
 idx_t StringUtil::CIFind(const vector<Identifier> &vector, const Identifier &search_string) {
